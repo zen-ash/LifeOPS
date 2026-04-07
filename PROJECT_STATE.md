@@ -1,5 +1,5 @@
 # LifeOPS — Project State
-_Last updated: Phase 3A complete (Focus Mode)_
+_Last updated: Phase 3B complete (Habit Tracker) — next: Phase 3C (Streak Protection)_
 
 ---
 
@@ -31,7 +31,7 @@ It is a multi-phase project being built incrementally, one phase at a time.
 
 ```
 Soft Eng Proj/                          ← project root
-├── CLAUDE.md                           ← persistent project rules for Claude
+├── DEVELOPMENT_GUIDE.md                           ← persistent project rules for Claude
 ├── PROJECT_STATE.md                    ← this file
 │
 ├── supabase/
@@ -166,12 +166,12 @@ All tables exist in Supabase (created by `schema.sql`), but only `profiles` and 
 |---|---|
 | `profiles` | Active — auth + onboarding |
 | `projects` | Active — dashboard CRUD |
-| `tasks` | Schema only — no UI yet |
+| `tasks` | Active — task management |
 | `notes` | Schema only — no UI yet |
 | `documents` | Schema only — no UI yet |
-| `focus_sessions` | Schema only — no UI yet |
-| `habits` | Schema only — no UI yet |
-| `habit_logs` | Schema only — no UI yet |
+| `focus_sessions` | Active — Focus Mode |
+| `habits` | Active — Habit Tracker |
+| `habit_logs` | Active — Habit Tracker |
 | `study_groups` | Schema only — no UI yet |
 | `study_group_members` | Schema only — no UI yet |
 
@@ -249,6 +249,14 @@ All other personal tables (`projects`, `tasks`, etc.) use a single `FOR ALL USIN
 - [x] All personal data protected by Row Level Security (users see only their own data)
 - [x] Full TypeScript types for all 8 DB entities in `types/index.ts`
 - [x] Server Actions for all mutations (no API routes needed)
+- [x] Habits — create habit (title, description, frequency daily/weekly, target days/week, optional project link)
+- [x] Habits — edit habit (all fields + active/inactive toggle)
+- [x] Habits — delete habit (with inline confirm)
+- [x] Habits — mark complete / unmark for today (per-date logs with duplicate prevention)
+- [x] Habits — streak computation (daily: consecutive days; weekly: consecutive weeks meeting target)
+- [x] Habits — "Convert to Task" action (creates task with today's due date and habit's linked project)
+- [x] Habits — dedicated `/habits` page with Active / Daily / Weekly / Inactive filter tabs
+- [x] Dashboard — Habits widget (active count, today's progress, best streak, quick daily check-off)
 
 ---
 
@@ -282,6 +290,7 @@ All other personal tables (`projects`, `tasks`, etc.) use a single `FOR ALL USIN
 | `supabase/add_project_type.sql` | Ensures `projects.type` column exists; backfills NULL rows to `'project'` | ✅ Yes — Phase 2B-1 (no-op if schema.sql was run) |
 | `supabase/add_tasks.sql` | Ensures tasks table, RLS policy, and trigger exist | ✅ Yes — Phase 2B-2 (no-op if schema.sql was run) |
 | `supabase/add_focus_sessions.sql` | Adds `project_id`, `goal`, `actual_minutes`, `created_at`, `updated_at` to `focus_sessions`; RLS + trigger | ✅ Yes — Phase 3A |
+| `supabase/add_habits.sql` | Renames `habits.name→title`; adds `target_days_per_week`, `linked_project_id`, `updated_at`; trigger; RLS | ✅ Yes — Phase 3B |
 
 ### What the user has confirmed running
 
@@ -324,13 +333,13 @@ No other env vars are required at this phase. Future phases will add:
 | `/dashboard` | `app/(dashboard)/dashboard/page.tsx` | Server | ✅ Working |
 | `/projects` | `app/(dashboard)/projects/page.tsx` | Server | ✅ Working |
 | `/tasks` | `app/(dashboard)/tasks/page.tsx` | Server | ✅ Working |
-| `/notes` | — | — | ❌ 404 — Phase 5 |
-| `/documents` | — | — | ❌ 404 — Phase 6 |
+| `/notes` | — | — | ❌ 404 — Phase 4B |
+| `/documents` | — | — | ❌ 404 — Phase 4C |
 | `/focus` | `app/(dashboard)/focus/page.tsx` | Server | ✅ Working |
-| `/habits` | — | — | ❌ 404 — Phase 8 |
-| `/calendar` | — | — | ❌ 404 — Phase 9 |
-| `/study-buddy` | — | — | ❌ 404 — Phase 10 |
-| `/ai` | — | — | ❌ 404 — Phase 11 |
+| `/habits` | `app/(dashboard)/habits/page.tsx` | Server | ✅ Working |
+| `/calendar` | — | — | ❌ 404 — Phase 4A |
+| `/study-buddy` | — | — | ❌ 404 — Phase 6A |
+| `/ai` | — | — | ❌ 404 — Phase 7A |
 | `/settings` | — | — | ❌ 404 — future |
 
 ---
@@ -374,6 +383,20 @@ _(Phase 2B-2: Task Management)_
 | `app/(dashboard)/tasks/page.tsx` | New — /tasks server page |
 | `app/(dashboard)/dashboard/page.tsx` | Added "Upcoming Tasks" section (due-date sorted, limit 5) |
 
+_(Phase 3B: Habit Tracker)_
+
+| File | Change |
+|---|---|
+| `supabase/add_habits.sql` | New — renames `name→title`, adds `target_days_per_week`, `linked_project_id`, `updated_at`; trigger; RLS |
+| `types/index.ts` | Updated `Habit` interface (`title`, `target_days_per_week`, `linked_project_id`, `updated_at`) |
+| `lib/actions/habits.ts` | New — `addHabit`, `editHabit`, `deleteHabit`, `logHabit`, `unlogHabit`, `convertHabitToTask` |
+| `components/habits/AddHabitDialog.tsx` | New — create habit modal |
+| `components/habits/EditHabitDialog.tsx` | New — edit habit modal |
+| `components/habits/HabitsView.tsx` | New — filter tabs, habit rows, streak display, inline confirm delete |
+| `components/habits/HabitsDashboardWidget.tsx` | New — dashboard habits widget with quick daily check-off |
+| `app/(dashboard)/habits/page.tsx` | New — /habits server page |
+| `app/(dashboard)/dashboard/page.tsx` | Added habits queries + HabitsDashboardWidget |
+
 _(Phase 3A: Focus Mode)_
 
 | File | Change |
@@ -390,15 +413,12 @@ _(Phase 3A: Focus Mode)_
 
 ## Next Recommended Task
 
-**Phase 3B: Habit Tracker + Streaks**
+**Phase 3C — Streak Protection + Recovery (Freeze day, grace window)**
 
-Focus Mode is complete. The next phase builds the Habit Tracker:
-
-- Dedicated `/habits` page
-- Create habit (name, description, frequency: daily/weekly, target days, color)
-- Mark habit done for today
-- Show current streak per habit
-- `lib/actions/habits.ts` with `addHabit`, `editHabit`, `deleteHabit`, `logHabit`, `unlogHabit`
+Habit Tracker is complete. The next phase adds streak safety features:
+- "Freeze" a habit streak for one missed day (one freeze token per period)
+- Grace window: streak doesn't break until end of next day
+- Visible freeze/recovery UI on the habits page
 
 ---
 
@@ -413,3 +433,5 @@ These are working and must be preserved across all future phases:
 5. **RLS on all tables** — every table has RLS enabled. Never disable RLS. Always filter by `user_id` in queries as a belt-and-suspenders check even though RLS enforces it.
 6. **`revalidatePath` after mutations** — always call this in server actions so the page cache is busted after a write.
 7. **Route group `(dashboard)`** — all future protected pages must live inside `app/(dashboard)/`. Do not create protected pages outside this group.
+8. **Habit logs duplicate prevention** — the `UNIQUE(habit_id, logged_date)` constraint on `habit_logs` prevents double-counting. `logHabit` uses upsert with `ignoreDuplicates: true`. Do not change this.
+9. **`habits.title` column** — the DB column is `title` (renamed from `name` via migration). Do not reference `name` in any habits query.

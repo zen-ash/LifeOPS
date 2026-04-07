@@ -93,14 +93,18 @@ export interface FocusSession {
 export interface Habit {
   id: string
   user_id: string
-  name: string
+  title: string
   description: string | null
   frequency: 'daily' | 'weekly'
   target_days: number[]
+  target_days_per_week: number | null
+  selected_weekdays: string[]
+  linked_project_id: string | null
   color: string
   icon: string | null
   is_active: boolean
   created_at: string
+  updated_at: string
 }
 
 export interface HabitLog {

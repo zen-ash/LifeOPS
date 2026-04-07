@@ -1,4 +1,4 @@
-# LifeOPS — Claude Code Project Rules
+# LifeOPS —  Claude Code Project Rules
 
 ## Project Overview
 LifeOPS is an undergraduate student productivity web app deployed on Vercel.
@@ -59,21 +59,27 @@ Soft Eng Proj/
 
 ## Session Continuity Rules
 - **Always read `PROJECT_STATE.md` at the start of a new session** before implementing anything
-- **Do not rebuild Phase 1 or 2** — they are working; start from the current state
-- **Preserve working auth, onboarding flow, and project CRUD** — these must not break
+- **Do not rebuild Phases 1–3A** — they are working; start from the current state
+- **Preserve working auth, onboarding flow, project CRUD, task management, and focus mode** — these must not break
 - **Sidebar links to unbuilt pages will 404** — this is expected and intentional until that phase is built
 - When a phase is complete, update `PROJECT_STATE.md` accordingly
 
 ## Phase Roadmap
-1. ✅ Project setup + Supabase Auth (login/register/logout) — COMPLETE
-2. ✅ Onboarding wizard (goals, hours, priorities, timezone) — COMPLETE
-3. ⬜ Projects / Areas / Clients — full page, edit, filter
-4. ⬜ Tasks (CRUD, priorities, tags, filters, due dates)
-5. ⬜ Notes and Journal
-6. ⬜ Document Vault (PDF/image upload via Supabase Storage)
-7. ⬜ Focus Mode (Pomodoro + time tracker)
-8. ⬜ Habit Tracker + Streaks
-9. ⬜ Calendar view
-10. ⬜ Study Buddy + Leaderboard
-11. ⬜ AI Assistant + AI Weekly Planner
-12. ⬜ Distraction Blocker (Chrome extension)
+- ✅ Phase 1 — Auth + dashboard + base project CRUD
+- ✅ Phase 2A — Onboarding wizard
+- ✅ Phase 2B-1 — Projects / Areas / Clients refactor
+- ✅ Phase 2B-2 — Task management
+- ✅ Phase 3A — Focus Mode (Pomodoro, custom timer, session history)
+- ⬜ Phase 3B — Habit Tracker (Daily/weekly habits, streaks, convert to task)
+- ⬜ Phase 3C — Streak Protection + Recovery (Freeze day, grace window)
+- ⬜ Phase 4A — Calendar (Due-date calendar view for tasks)
+- ⬜ Phase 4B — Notes + Journal (Simple CRUD)
+- ⬜ Phase 4C — Document Vault (Upload/store PDFs and images)
+- ⬜ Phase 5A — Tagging System (Tags for tasks, notes, documents)
+- ⬜ Phase 5B — Smart Filters / Saved Views ("Urgent + School + This week")
+- ⬜ Phase 6A — Study Buddy foundation (Add/connect friend)
+- ⬜ Phase 6B — Leaderboard (Rank by focus minutes / habits)
+- ⬜ Phase 7A — AI Assistant (App-context-aware chat)
+- ⬜ Phase 7B — AI Planner (Turn goals + tasks into a weekly plan)
+- ⬜ Phase 8 — Distraction Blocker Extension (Separate Chrome extension)
+- ⬜ Phase 9 — Final polish + deployment

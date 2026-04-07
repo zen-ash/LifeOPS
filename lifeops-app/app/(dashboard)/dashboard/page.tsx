@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { AddProjectDialog } from '@/components/projects/AddProjectDialog'
 import { ProjectCard } from '@/components/projects/ProjectCard'
+import { HabitsDashboardWidget } from '@/components/habits/HabitsDashboardWidget'
 import { FolderOpen, CheckSquare, ArrowRight, Timer } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
@@ -32,20 +33,82 @@ function isOverdue(dateStr: string): boolean {
   return due < today
 }
 
+// ── Streak helpers (server-side, for dashboard widget) ───────────────
+
+function shiftDate(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().split('T')[0]
+}
+
+function computeDailyStreak(today: string, logDates: string[]): number {
+  const dateSet = new Set(logDates)
+  const startDate = dateSet.has(today) ? today : shiftDate(today, -1)
+  if (!dateSet.has(startDate)) return 0
+  let streak = 0
+  let cur = startDate
+  while (dateSet.has(cur)) {
+    streak++
+    cur = shiftDate(cur, -1)
+  }
+  return streak
+}
+
+function getMonWeekStart(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00Z')
+  const dow = d.getUTCDay()
+  const diff = dow === 0 ? -6 : 1 - dow
+  return shiftDate(dateStr, diff)
+}
+
+function computeWeeklyStreak(today: string, targetPerWeek: number | null, logDates: string[]): number {
+  if (logDates.length === 0) return 0
+  const dateSet = new Set(logDates)
+  const target = targetPerWeek ?? 1
+  const weekCounts = new Map<string, number>()
+  for (const d of dateSet) {
+    const ws = getMonWeekStart(d)
+    weekCounts.set(ws, (weekCounts.get(ws) ?? 0) + 1)
+  }
+  let streak = 0
+  let ws = getMonWeekStart(today)
+  for (let i = 0; i < 52; i++) {
+    const count = weekCounts.get(ws) ?? 0
+    if (count >= target) {
+      streak++
+      ws = shiftDate(ws, -7)
+    } else if (i === 0) {
+      ws = shiftDate(ws, -7) // current week may still be in progress
+    } else {
+      break
+    }
+  }
+  return streak
+}
+
+// Maps JS getDay() (0=Sun…6=Sat) to our short weekday strings
+const JS_DAY_TO_SHORT = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
+
 export default async function DashboardPage() {
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Date boundaries for focus stats
   const now = new Date()
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+
+  // Date boundaries for focus stats
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
   const weekStart = new Date(
     now.getFullYear(),
     now.getMonth(),
-    now.getDate() - now.getDay() // Sunday of current week
+    now.getDate() - now.getDay()
   ).toISOString()
+
+  const sixtyDaysAgo = new Date(now)
+  sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60)
+  const sixtyDaysAgoStr = `${sixtyDaysAgo.getFullYear()}-${String(sixtyDaysAgo.getMonth() + 1).padStart(2, '0')}-${String(sixtyDaysAgo.getDate()).padStart(2, '0')}`
 
   const [
     { data: profile },
@@ -53,6 +116,8 @@ export default async function DashboardPage() {
     { data: upcomingTasks },
     { data: focusToday },
     { data: focusWeek },
+    { data: activeHabits },
+    { data: recentHabitLogs },
   ] = await Promise.all([
     supabase
       .from('profiles')
@@ -82,11 +147,22 @@ export default async function DashboardPage() {
       .select('actual_minutes, duration_minutes, completed')
       .eq('user_id', user!.id)
       .gte('started_at', weekStart),
+    supabase
+      .from('habits')
+      .select('id, title, frequency, target_days_per_week, selected_weekdays')
+      .eq('user_id', user!.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('habit_logs')
+      .select('habit_id, logged_date')
+      .eq('user_id', user!.id)
+      .gte('logged_date', sixtyDaysAgoStr),
   ])
 
   const firstName = profile?.full_name?.split(' ')[0] ?? 'there'
 
-  // Compute focus stats
+  // Focus stats
   function sumMinutes(rows: { actual_minutes: number | null; duration_minutes: number }[] | null) {
     return (rows ?? []).reduce(
       (sum, s) => sum + (s.actual_minutes ?? s.duration_minutes),
@@ -97,6 +173,45 @@ export default async function DashboardPage() {
   const todayMinutes = sumMinutes(focusToday)
   const weekMinutes = sumMinutes(focusWeek)
   const weekCompleted = (focusWeek ?? []).filter((s) => s.completed).length
+
+  // Habits stats
+  const habitLogsMap: Record<string, string[]> = {}
+  for (const log of recentHabitLogs ?? []) {
+    if (!habitLogsMap[log.habit_id]) habitLogsMap[log.habit_id] = []
+    habitLogsMap[log.habit_id].push(log.logged_date)
+  }
+
+  // Short weekday string for today (e.g. 'mon', 'fri')
+  const todayShort = JS_DAY_TO_SHORT[now.getDay()]
+
+  // Habits due today:
+  //   - daily habits: always
+  //   - weekly habits with selected days: only when today's weekday is in the list
+  //   - weekly habits with null/empty selected_weekdays: always (backward compat)
+  const todayHabits = (activeHabits ?? []).filter((h) => {
+    if (h.frequency === 'daily') return true
+    const days: string[] = h.selected_weekdays ?? []
+    if (days.length === 0) return true   // no schedule set → show every day
+    return days.includes(todayShort)
+  })
+
+  const todayHabitsWithStreak = todayHabits.map((h) => ({
+    id: h.id,
+    title: h.title,
+    frequency: h.frequency as 'daily' | 'weekly',
+    streak:
+      h.frequency === 'daily'
+        ? computeDailyStreak(today, habitLogsMap[h.id] ?? [])
+        : computeWeeklyStreak(today, h.target_days_per_week, habitLogsMap[h.id] ?? []),
+  }))
+
+  const todayHabitIds = new Set(todayHabits.map((h) => h.id))
+  // Only count completions for habits that are actually due today
+  const completedTodayIds = (recentHabitLogs ?? [])
+    .filter((l) => l.logged_date === today && todayHabitIds.has(l.habit_id))
+    .map((l) => l.habit_id)
+
+  const bestStreak = Math.max(0, ...todayHabitsWithStreak.map((h) => h.streak))
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
@@ -194,6 +309,16 @@ export default async function DashboardPage() {
           ))}
         </div>
       </section>
+
+      {/* Habits widget */}
+      <HabitsDashboardWidget
+        activeCount={(activeHabits ?? []).length}
+        completedTodayCount={completedTodayIds.length}
+        bestStreak={bestStreak}
+        todayHabits={todayHabitsWithStreak}
+        today={today}
+        completedTodayIds={completedTodayIds}
+      />
 
       {/* Upcoming Tasks */}
       <section>
