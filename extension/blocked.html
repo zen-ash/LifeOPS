@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Site Blocked — LifeOPS Focus Mode</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f3ff;
+      color: #1e1b4b;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 20px;
+      padding: 48px 40px;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 20px 40px -8px rgb(99 102 241 / 0.15);
+    }
+
+    .icon {
+      font-size: 56px;
+      line-height: 1;
+      margin-bottom: 20px;
+      display: block;
+    }
+
+    .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #6366f1;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 10px;
+      color: #1e1b4b;
+    }
+
+    .blocked-domain {
+      display: inline-block;
+      background: #eef2ff;
+      color: #4338ca;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 18px;
+      font-family: 'SFMono-Regular', Consolas, monospace;
+    }
+
+    p {
+      font-size: 15px;
+      line-height: 1.6;
+      color: #4b5563;
+      margin-bottom: 32px;
+    }
+
+    .btn-back {
+      display: inline-block;
+      background: #6366f1;
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 12px 28px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s, transform 0.1s;
+      margin-right: 10px;
+    }
+    .btn-back:hover { background: #4f46e5; }
+    .btn-back:active { transform: scale(0.97); }
+
+    .btn-timer {
+      display: inline-block;
+      background: transparent;
+      color: #6366f1;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 12px 28px;
+      border-radius: 10px;
+      border: 2px solid #c7d2fe;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .btn-timer:hover { background: #eef2ff; border-color: #a5b4fc; }
+
+    .divider {
+      border: none;
+      border-top: 1px solid #e5e7eb;
+      margin: 32px 0 24px;
+    }
+
+    .tip {
+      font-size: 13px;
+      color: #9ca3af;
+      line-height: 1.5;
+    }
+    .tip strong { color: #6b7280; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">⚡ LifeOPS</div>
+
+    <span class="icon">🧠</span>
+
+    <h1>You're in Focus Mode</h1>
+
+    <div class="blocked-domain" id="blocked-site">this site</div>
+
+    <p>
+      This site is blocked while your focus session is active.<br />
+      Stay on track — your future self will thank you.
+    </p>
+
+    <div>
+      <button class="btn-back" onclick="history.back()">← Go Back</button>
+      <a class="btn-timer" href="javascript:void(0)" id="lifeops-link">Open LifeOPS</a>
+    </div>
+
+    <hr class="divider" />
+
+    <p class="tip">
+      <strong>To unblock:</strong> open the LifeOPS Focus Blocker extension
+      and turn off Focus Mode.
+    </p>
+  </div>
+
+  <script>
+    // Show the blocked domain if it was passed as a query parameter
+    const params = new URLSearchParams(location.search)
+    const site = params.get('site')
+    if (site) {
+      document.getElementById('blocked-site').textContent = site
+      document.title = `${site} blocked — LifeOPS Focus Mode`
+    }
+
+    // "Open LifeOPS" opens the app in a new tab
+    // Replace with your deployed URL if needed; localhost:3000 works for dev
+    const appUrl = 'http://localhost:3000/focus'
+    document.getElementById('lifeops-link').href = appUrl
+    document.getElementById('lifeops-link').target = '_blank'
+  </script>
+</body>
+</html>

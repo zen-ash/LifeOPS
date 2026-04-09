@@ -1,5 +1,5 @@
 # LifeOPS — Project State
-_Last updated: Phase 7A complete (AI Assistant) — next: Phase 7B (AI Planner)_
+_Last updated: Phase 9 complete — project is functionally complete_
 
 ---
 
@@ -52,8 +52,18 @@ Soft Eng Proj/                          ← project root
 │   ├── add_study_buddy.sql            ← Phase 6A
 │   └── add_leaderboard.sql            ← Phase 6B
 │
-├── extension/
-│   └── README.md                       ← placeholder only, Phase 8
+├── extension/                          ← Phase 8: Chrome extension (load unpacked in Chrome)
+│   ├── manifest.json                   ← Manifest V3
+│   ├── background.js                   ← Service worker: declarativeNetRequest rules
+│   ├── blocked.html                    ← Page shown when a blocked site is visited
+│   ├── README.md                       ← How to load and use the extension
+│   ├── popup/
+│   │   ├── popup.html                  ← Extension popup UI
+│   │   └── popup.js                   ← Toggle focus mode, manage blocked sites
+│   └── icons/
+│       ├── icon16.svg
+│       ├── icon48.svg
+│       └── icon128.svg
 │
 └── lifeops-app/                        ← Next.js 15 application
     ├── package.json
@@ -69,7 +79,8 @@ Soft Eng Proj/                          ← project root
     │   ├── providers.tsx
     │   ├── page.tsx                    ← landing page (public)
     │   ├── api/
-    │   │   └── chat/route.ts           ← Phase 7A: streaming AI chat endpoint
+    │   │   ├── chat/route.ts           ← Phase 7A: streaming AI chat endpoint
+    │   │   └── planner/route.ts        ← Phase 7B: generateObject weekly plan endpoint
     │   ├── auth/
     │   │   ├── login/page.tsx
     │   │   ├── register/page.tsx
@@ -90,7 +101,8 @@ Soft Eng Proj/                          ← project root
     │       ├── documents/page.tsx
     │       ├── study-buddy/page.tsx
     │       ├── leaderboard/page.tsx
-    │       └── assistant/page.tsx      ← Phase 7A: AI chat UI (client component)
+    │       ├── assistant/page.tsx      ← Phase 7A: AI chat UI (client component)
+    │       └── planner/page.tsx        ← Phase 7B: AI planner (server + PlannerView client)
     │
     ├── components/
     │   ├── ThemeToggle.tsx
@@ -124,6 +136,8 @@ Soft Eng Proj/                          ← project root
     │   ├── study-buddy/
     │   │   └── StudyBuddyView.tsx      ← add/manage buddy relationships (Phase 6A)
     │   ├── leaderboard/                ← (no separate component; render logic in page.tsx)
+    │   ├── planner/
+    │   │   └── PlannerView.tsx         ← generate/save/render weekly plan (Phase 7B)
     │   └── ui/
     │       └── tag-input.tsx           ← TagInput, TagBadge, TagFilterBar (Phase 5A)
     │
@@ -141,10 +155,11 @@ Soft Eng Proj/                          ← project root
     │   │   ├── documents.ts            ← addDocument, editDocument, deleteDocument
     │   │   ├── tags.ts                 ← setTaskTags, setNoteTags, setDocumentTags (Phase 5A)
     │   │   ├── savedViews.ts           ← createSavedView, deleteSavedView, renameSavedView (Phase 5B)
-    │   │   └── studyBuddy.ts           ← sendBuddyRequest, respondToBuddyRequest, removeBuddy (Phase 6A)
+    │   │   ├── studyBuddy.ts           ← sendBuddyRequest, respondToBuddyRequest, removeBuddy (Phase 6A)
+    │   │   └── planner.ts              ← savePlan (upsert weekly_plans) (Phase 7B)
     │   └── utils.ts                    ← cn() helper
     │
-    ├── types/index.ts                  ← Profile, Project, Task, Note, Document, FocusSession, Habit, HabitLog, HabitFreezeLog, Tag, SavedView, StudyGroup
+    ├── types/index.ts                  ← Profile, Project, Task, Note, Document, FocusSession, Habit, HabitLog, HabitFreezeLog, Tag, SavedView, StudyGroup, WeeklyPlan, GeneratedPlan, PlanDay
     └── hooks/useUser.ts
 ```
 
@@ -172,6 +187,7 @@ Soft Eng Proj/                          ← project root
 | `saved_views` | Active | Named filter presets per user per entity_type; `filters_json JSONB` |
 | `study_buddies` | Active | Peer-to-peer buddy requests; `status` pending/accepted/declined; Phase 6A |
 | `get_weekly_leaderboard(p_timezone)` | Active RPC | SECURITY DEFINER function; aggregates focus/tasks/habits for self+buddies this week; Phase 6B |
+| `weekly_plans` | Active | AI-generated weekly plans; `UNIQUE(user_id, week_start_date)`; upsert on re-save; `plan_json` JSONB |
 | `study_groups` | Schema only | Group-based study rooms — future phase |
 | `study_group_members` | Schema only | Group membership — future phase |
 
@@ -215,6 +231,7 @@ All tables have RLS enabled with `FOR ALL USING (auth.uid() = user_id)` (or `= i
 | `add_saved_views.sql` | 5B | Yes — creates `saved_views` table with RLS |
 | `add_study_buddy.sql` | 6A | Yes — creates `study_buddies` table, `find_user_by_email` RPC, profile buddy policy |
 | `add_leaderboard.sql` | 6B | Yes — creates `get_weekly_leaderboard(p_timezone)` SECURITY DEFINER function |
+| `add_weekly_plans.sql` | 7B | Yes — creates `weekly_plans` table with RLS; `UNIQUE(user_id, week_start_date)` |
 
 ---
 
@@ -239,6 +256,7 @@ All tables have RLS enabled with `FOR ALL USING (auth.uid() = user_id)` (or `= i
 | `/study-buddy` | Server | ✅ |
 | `/leaderboard` | Server | ✅ |
 | `/assistant` | Client | ✅ Phase 7A |
+| `/planner` | Server + Client | ✅ Phase 7B |
 | `/settings` | — | ❌ 404 — future |
 
 ---
@@ -251,7 +269,7 @@ All tables have RLS enabled with `FOR ALL USING (auth.uid() = user_id)` (or `= i
 4. **Habits widget** (`HabitsDashboardWidget`) — active count, today's progress (X/Y done), best streak, quick daily check-off list (habits due today only, filtered by weekday schedule)
 5. **Upcoming Tasks** — next 5 non-done tasks with due dates, sorted ascending; priority badge + overdue highlight
 6. **Notes & Documents** — 3-column grid: Notes count (→ /notes), Journal count (→ /journal), Documents count (→ /documents)
-7. **Study Buddy** — 2-column grid: buddy count + pending requests (→ /study-buddy) | leaderboard rank this week (→ /leaderboard)
+7. **Study Buddy** — 3-column grid: buddy count + pending requests (→ /study-buddy) | leaderboard rank this week (→ /leaderboard) | AI Planner link (→ /planner)
 8. **Projects** — full project grid with AddProjectDialog
 
 ---
@@ -273,6 +291,9 @@ All tables have RLS enabled with `FOR ALL USING (auth.uid() = user_id)` (or `= i
 - ✅ Phase 6A — Study Buddy Foundation (send/accept/decline/remove buddy requests by email; SECURITY DEFINER email lookup; buddy count on dashboard)
 - ✅ Phase 6B — Leaderboard (weekly ranking for self + accepted buddies; SECURITY DEFINER aggregation; score = focus_min + tasks×20 + habits×10; rank shown on dashboard)
 - ✅ Phase 7A — AI Assistant (context-aware chat at `/assistant`; Vercel AI SDK + OpenAI gpt-4o-mini; injects tasks/habits/goals as system prompt; `create_task` tool; streaming responses)
+- ✅ Phase 7B — AI Planner (weekly plan at `/planner`; `generateObject` with Zod schema; context injection; save/upsert to `weekly_plans`; regenerate flow)
+- ✅ Phase 8 — Distraction Blocker Extension (Manifest V3 Chrome extension; manual toggle; `declarativeNetRequest` dynamic rules; `chrome.storage.local`; blocked.html redirect page)
+- ✅ Phase 9 — Final Polish + Deployment Readiness (mobile responsive grids on dashboard; loading.tsx skeletons for dashboard/planner/leaderboard; full capstone README.md in lifeops-app/)
 
 ---
 
@@ -304,6 +325,8 @@ All tables have RLS enabled with `FOR ALL USING (auth.uid() = user_id)` (or `= i
 13. **`get_weekly_leaderboard(p_timezone TEXT DEFAULT 'UTC')` RPC** — Phase 6B SECURITY DEFINER. Call via `supabase.rpc('get_weekly_leaderboard', { p_timezone: tz })`. Returns `LeaderboardEntry[]` sorted by rank ASC. Dashboard uses `'UTC'` default; the leaderboard page uses the user's `profile.timezone` for accuracy. Scoring: `focus_minutes + (completed_tasks * 20) + (habit_completions * 10)`. Week start = Monday (ISO-8601, `date_trunc('week', ...)`). Only the caller + their accepted buddies are included.
 11. **`tags.color`** — deterministic color is auto-assigned from a fixed palette based on the tag name hash in `lib/actions/tags.ts`. No user-facing color picker needed.
 12. **AI Assistant (`/assistant`)** — Phase 7A. API route at `app/api/chat/route.ts` uses Vercel AI SDK `streamText` + `@ai-sdk/openai` (gpt-4o-mini). Auth is enforced via `createClient()` inside the route — same cookie-based session as every other server action. Context (tasks, habits, profile) is fetched per-request and serialized into the system prompt. The `create_task` tool inserts directly via the server-scoped Supabase client (already authenticated). Requires `OPENAI_API_KEY` in `.env.local`. No DB schema changes needed.
+13. **AI Planner (`/planner`)** — Phase 7B. API route at `app/api/planner/route.ts` uses `generateObject` (not streaming) with a Zod schema to produce a structured `GeneratedPlan` JSON. Context: profile, up to 20 incomplete tasks, active habits with weekday schedules, focus minutes this week. `savePlan` server action does a Supabase upsert on `weekly_plans` with `onConflict: 'user_id,week_start_date'`. Page = Server Component (loads saved plan) + `PlannerView` Client Component (generate/save/render state). `zod` must stay at v3 (`zod@3`); v4 breaks the AI SDK tool schema validation.
+14. **`zod` version lock** — Must stay at `zod@3.x`. The `@ai-sdk/openai` package has `peerDependencies: { zod: "^3.0.0" }`. Installing `zod@4` causes silent runtime failures in tool parameter validation.
 
 ---
 
@@ -334,12 +357,10 @@ OPENAI_API_KEY=sk-...   # Required for Phase 7A AI Assistant
 
 ## Next Recommended Phase
 
-**Phase 7B — AI Planner**
+**Project is functionally complete.** All 9 phases have been implemented.
 
-Turn the user's goals and task list into a structured weekly plan using the AI.
-
-Key facts:
-- Builds on Phase 7A's API route and context injection
-- Could be a dedicated `/planner` page or a mode within `/assistant`
-- Output: a suggested day-by-day schedule based on due dates, priorities, study hours, and habit schedule
-- Optional: "Accept plan" creates tasks automatically via `create_task` tool
+Any future work would be incremental improvements:
+- Mobile sidebar hamburger/drawer (sidebar currently `hidden md:flex`)
+- Global toast notifications (errors currently shown inline)
+- Profile editing UI (avatar, work hours fields exist in DB but no edit UI)
+- Chrome Web Store submission for the extension (requires PNG icons and privacy policy)

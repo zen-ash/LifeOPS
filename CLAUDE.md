@@ -2,7 +2,7 @@
 
 ## Project Overview
 LifeOPS is an undergraduate student productivity web app deployed on Vercel.
-It is built phase by phase. Do not implement features ahead of the current phase.
+All 9 phases are complete. The project is functionally finished.
 
 ## Exact Stack
 - Next.js 15, App Router (no Pages Router)
@@ -17,7 +17,7 @@ It is built phase by phase. Do not implement features ahead of the current phase
 - **MVP level only** — no overengineering, no speculative abstractions
 - **Vercel-friendly** — no custom servers, no long-running processes, no cron jobs in app code
 - **App Router only** — all pages in `app/`, data fetching in Server Components or Server Actions
-- **Server Actions for all mutations** — `lib/actions/*.ts` with `'use server'`, no custom API routes for CRUD. Exception: `app/api/chat/route.ts` is a streaming Route Handler required by the Vercel AI SDK — this is intentional and not a CRUD route
+- **Server Actions for all mutations** — `lib/actions/*.ts` with `'use server'`, no custom API routes for CRUD. Exception: `app/api/chat/route.ts` (streaming) and `app/api/planner/route.ts` (generateObject) are Route Handlers required by the Vercel AI SDK — intentional, not CRUD routes
 - **`@supabase/ssr`** — use `lib/supabase/client.ts` (browser) and `lib/supabase/server.ts` (server). Never import from `@supabase/auth-helpers-nextjs`
 - **Protected pages inside `(dashboard)` route group** — the layout at `app/(dashboard)/layout.tsx` is the single auth + onboarding guard
 - **Onboarding guard in layout, not middleware** — middleware only handles auth; `is_onboarded` check is in the dashboard layout
@@ -80,6 +80,6 @@ Soft Eng Proj/
 - ✅ Phase 6A — Study Buddy foundation (Send/accept/remove buddy requests by email; SECURITY DEFINER lookup; buddy count on dashboard)
 - ✅ Phase 6B — Leaderboard (Weekly ranking for self + buddies; SECURITY DEFINER aggregation; /leaderboard page; rank widget on dashboard)
 - ✅ Phase 7A — AI Assistant (Context-aware chat at /assistant; Vercel AI SDK + OpenAI gpt-4o-mini; tasks/habits/goals injected as system prompt; create_task tool; streaming)
-- ⬜ Phase 7B — AI Planner (Turn goals + tasks into a weekly plan)
-- ⬜ Phase 8 — Distraction Blocker Extension (Separate Chrome extension)
-- ⬜ Phase 9 — Final polish + deployment
+- ✅ Phase 7B — AI Planner (Weekly plan at /planner; generateObject with Zod schema; save/upsert to weekly_plans; regenerate flow)
+- ✅ Phase 8 — Distraction Blocker Extension (MV3 Chrome extension in /extension; manual toggle; declarativeNetRequest; chrome.storage.local)
+- ✅ Phase 9 — Final polish + deployment readiness (mobile responsive grids; loading.tsx skeletons; capstone README.md)

@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { AddProjectDialog } from '@/components/projects/AddProjectDialog'
 import { ProjectCard } from '@/components/projects/ProjectCard'
 import { HabitsDashboardWidget } from '@/components/habits/HabitsDashboardWidget'
-import { FolderOpen, CheckSquare, ArrowRight, Timer, FileText, BookOpen, Vault, Users, Trophy } from 'lucide-react'
+import { FolderOpen, CheckSquare, ArrowRight, Timer, FileText, BookOpen, Vault, Users, Trophy, BrainCircuit } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 
@@ -324,7 +324,7 @@ export default async function DashboardPage() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[
             { label: 'Today', value: `${todayMinutes}m`, sub: 'focused' },
             { label: 'This week', value: `${weekMinutes}m`, sub: 'focused' },
@@ -417,7 +417,7 @@ export default async function DashboardPage() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold">Notes & Documents</h2>
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Link
             href="/notes"
             className="rounded-xl border bg-card p-4 flex flex-col items-center text-center hover:bg-accent/50 transition-colors"
@@ -448,12 +448,12 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      {/* Study Buddy + Leaderboard */}
+      {/* Study Buddy + Leaderboard + AI Planner */}
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold">Study Buddy</h2>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Link
             href="/study-buddy"
             className="flex items-center gap-3 rounded-xl border bg-card p-4 hover:bg-accent/50 transition-colors"
@@ -484,6 +484,16 @@ export default async function DashboardPage() {
               <p className="text-xs text-muted-foreground truncate">
                 {totalParticipants <= 1 ? 'Add buddies to compete' : 'This week · View →'}
               </p>
+            </div>
+          </Link>
+          <Link
+            href="/planner"
+            className="flex items-center gap-3 rounded-xl border bg-card p-4 hover:bg-accent/50 transition-colors"
+          >
+            <BrainCircuit className="h-5 w-5 text-violet-500 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium">AI Planner</p>
+              <p className="text-xs text-muted-foreground truncate">Weekly plan →</p>
             </div>
           </Link>
         </div>

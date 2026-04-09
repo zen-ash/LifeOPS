@@ -198,3 +198,26 @@ export interface StudyBuddy {
   created_at: string
   updated_at: string
 }
+
+// Phase 7B: AI Planner
+export interface PlanDay {
+  day: string
+  focusBlock: string
+  topTasks: string[]
+  habitReminder: string
+  notes: string
+}
+
+export interface GeneratedPlan {
+  weekStart: string
+  days: PlanDay[]
+}
+
+export interface WeeklyPlan {
+  id: string
+  user_id: string
+  week_start_date: string
+  plan_json: GeneratedPlan
+  created_at: string
+  updated_at: string
+}

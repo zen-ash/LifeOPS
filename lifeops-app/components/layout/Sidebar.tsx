@@ -15,6 +15,7 @@ import {
   Users,
   Trophy,
   Bot,
+  BrainCircuit,
   Settings,
   Zap,
 } from 'lucide-react'
@@ -39,6 +40,7 @@ const toolsNav = [
   { label: 'Study Buddy', href: '/study-buddy', icon: Users },
   { label: 'Leaderboard', href: '/leaderboard', icon: Trophy },
   { label: 'AI Assistant', href: '/assistant', icon: Bot },
+  { label: 'AI Planner', href: '/planner', icon: BrainCircuit },
 ]
 
 interface SidebarProps {
