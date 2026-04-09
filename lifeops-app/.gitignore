@@ -28,9 +28,8 @@ next-env.d.ts
 # Ignore AI tools and session notes
 .claude/
 CLAUDE.md
-NEXT_CHAT_PR*
-SESSION_HAN*
-PROJECT_STAT*
-
+NEXT_CHAT_PROMPT.md
+SESSION_HANDOFF.md
+PROJECT_STATE.md
 # Ignore extension folder
 extension/

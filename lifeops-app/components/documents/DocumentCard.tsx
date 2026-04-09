@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { FileText, Image, File, Download, Trash2, Loader2, Pencil } from 'lucide-react'
+import { FileText, Image as ImageIcon, File, Download, Trash2, Loader2, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -64,7 +64,7 @@ function FileIcon({ type }: { type: string | null }) {
     return <FileText className="h-5 w-5 text-red-500 shrink-0" />
   }
   if (type?.startsWith('image/')) {
-    return <Image className="h-5 w-5 text-blue-500 shrink-0" />
+    return <ImageIcon className="h-5 w-5 text-blue-500 shrink-0" />
   }
   return <File className="h-5 w-5 text-muted-foreground shrink-0" />
 }

@@ -53,7 +53,7 @@ export function StudyBuddyView({ currentUserId, relationships, profileMap }: Stu
     if (!email.trim()) return
     startTransition(async () => {
       const result = await sendBuddyRequest(email.trim())
-      if (result.error) {
+      if ('error' in result) {
         setMessage({ type: 'error', text: result.error })
       } else {
         setMessage({ type: 'success', text: 'Buddy request sent!' })
