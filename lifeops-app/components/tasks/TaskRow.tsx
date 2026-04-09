@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Pencil, Trash2 } from 'lucide-react'
 import { deleteTask, toggleTaskStatus } from '@/lib/actions/tasks'
 import { EditTaskDialog } from './EditTaskDialog'
+import { TagBadge } from '@/components/ui/tag-input'
 import { cn } from '@/lib/utils'
-import type { Task } from '@/types'
+import type { Tag, Task } from '@/types'
 
 type TaskWithProject = Task & {
   projects: { id: string; name: string; color: string } | null
@@ -20,6 +21,7 @@ interface Project {
 interface TaskRowProps {
   task: TaskWithProject
   projects: Project[]
+  taskTags: Tag[]
 }
 
 const PRIORITY_STYLES: Record<string, string> = {
@@ -30,7 +32,6 @@ const PRIORITY_STYLES: Record<string, string> = {
 }
 
 function formatDueDate(dateStr: string): string {
-  // Parse as local date to avoid timezone-shifting the date
   const [year, month, day] = dateStr.split('-').map(Number)
   const due = new Date(year, month - 1, day)
   const today = new Date()
@@ -53,7 +54,7 @@ function isOverdue(dateStr: string, status: string): boolean {
   return due < today
 }
 
-export function TaskRow({ task, projects }: TaskRowProps) {
+export function TaskRow({ task, projects, taskTags }: TaskRowProps) {
   const [pending, setPending] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
 
@@ -73,7 +74,7 @@ export function TaskRow({ task, projects }: TaskRowProps) {
 
   return (
     <>
-      <div className="group flex items-center gap-3 py-3 px-1 border-b last:border-b-0 hover:bg-accent/30 rounded-sm transition-colors">
+      <div className="group flex items-start gap-3 py-3 px-1 border-b last:border-b-0 hover:bg-accent/30 rounded-sm transition-colors">
         {/* Checkbox */}
         <button
           type="button"
@@ -81,7 +82,7 @@ export function TaskRow({ task, projects }: TaskRowProps) {
           disabled={pending}
           aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
           className={cn(
-            'h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition-colors',
+            'mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition-colors',
             isDone
               ? 'bg-primary border-primary'
               : 'border-muted-foreground/40 hover:border-primary'
@@ -94,7 +95,7 @@ export function TaskRow({ task, projects }: TaskRowProps) {
           )}
         </button>
 
-        {/* Title + description */}
+        {/* Title + description + tags */}
         <div className="flex-1 min-w-0">
           <p
             className={cn(
@@ -107,10 +108,17 @@ export function TaskRow({ task, projects }: TaskRowProps) {
           {task.description && (
             <p className="text-xs text-muted-foreground truncate">{task.description}</p>
           )}
+          {taskTags.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {taskTags.map((tag) => (
+                <TagBadge key={tag.id} tag={tag} />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Meta: priority, due date, project */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 mt-0.5">
           <span
             className={cn(
               'text-[11px] font-medium px-1.5 py-0.5 rounded capitalize',
@@ -145,7 +153,7 @@ export function TaskRow({ task, projects }: TaskRowProps) {
         </div>
 
         {/* Action buttons — visible on hover */}
-        <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex gap-1 shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
           <Button
             variant="ghost"
             size="icon"
@@ -170,6 +178,7 @@ export function TaskRow({ task, projects }: TaskRowProps) {
       <EditTaskDialog
         task={task}
         projects={projects}
+        taskTags={taskTags}
         open={editOpen}
         onOpenChange={setEditOpen}
       />

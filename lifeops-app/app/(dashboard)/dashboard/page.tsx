@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { AddProjectDialog } from '@/components/projects/AddProjectDialog'
 import { ProjectCard } from '@/components/projects/ProjectCard'
 import { HabitsDashboardWidget } from '@/components/habits/HabitsDashboardWidget'
-import { FolderOpen, CheckSquare, ArrowRight, Timer } from 'lucide-react'
+import { FolderOpen, CheckSquare, ArrowRight, Timer, FileText, BookOpen, Vault, Users, Trophy } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 
@@ -118,6 +118,11 @@ export default async function DashboardPage() {
     { data: focusWeek },
     { data: activeHabits },
     { data: recentHabitLogs },
+    { count: notesCount },
+    { count: journalCount },
+    { count: documentsCount },
+    { data: buddyRows },
+    { data: leaderboardRows },
   ] = await Promise.all([
     supabase
       .from('profiles')
@@ -158,9 +163,41 @@ export default async function DashboardPage() {
       .select('habit_id, logged_date')
       .eq('user_id', user!.id)
       .gte('logged_date', sixtyDaysAgoStr),
+    supabase
+      .from('notes')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user!.id)
+      .eq('type', 'note'),
+    supabase
+      .from('notes')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user!.id)
+      .eq('type', 'journal'),
+    supabase
+      .from('documents')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user!.id),
+    supabase
+      .from('study_buddies')
+      .select('id, requester_user_id, addressee_user_id, status'),
+    supabase.rpc('get_weekly_leaderboard', { p_timezone: 'UTC' }),
   ])
 
   const firstName = profile?.full_name?.split(' ')[0] ?? 'there'
+
+  // Study buddy stats
+  type BuddyRow = { id: string; requester_user_id: string; addressee_user_id: string; status: string }
+  const buddies = (buddyRows as BuddyRow[] | null) ?? []
+  const buddyCount = buddies.filter((b) => b.status === 'accepted').length
+  const incomingCount = buddies.filter(
+    (b) => b.addressee_user_id === user!.id && b.status === 'pending'
+  ).length
+
+  // Leaderboard rank for the dashboard snippet
+  type LbRow = { user_id: string; rank: number; score: number }
+  const lbRows = (leaderboardRows as LbRow[] | null) ?? []
+  const myRank = lbRows.find((r) => r.user_id === user!.id)?.rank ?? null
+  const totalParticipants = lbRows.length
 
   // Focus stats
   function sumMinutes(rows: { actual_minutes: number | null; duration_minutes: number }[] | null) {
@@ -373,6 +410,83 @@ export default async function DashboardPage() {
             </Link>
           </div>
         )}
+      </section>
+
+      {/* Notes, Journal & Documents */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold">Notes & Documents</h2>
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          <Link
+            href="/notes"
+            className="rounded-xl border bg-card p-4 flex flex-col items-center text-center hover:bg-accent/50 transition-colors"
+          >
+            <FileText className="h-5 w-5 text-primary mb-2" />
+            <p className="text-2xl font-bold">{notesCount ?? 0}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Notes</p>
+            <p className="text-[10px] text-primary mt-0.5">Open →</p>
+          </Link>
+          <Link
+            href="/journal"
+            className="rounded-xl border bg-card p-4 flex flex-col items-center text-center hover:bg-accent/50 transition-colors"
+          >
+            <BookOpen className="h-5 w-5 text-primary mb-2" />
+            <p className="text-2xl font-bold">{journalCount ?? 0}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Journal</p>
+            <p className="text-[10px] text-primary mt-0.5">Open →</p>
+          </Link>
+          <Link
+            href="/documents"
+            className="rounded-xl border bg-card p-4 flex flex-col items-center text-center hover:bg-accent/50 transition-colors"
+          >
+            <Vault className="h-5 w-5 text-primary mb-2" />
+            <p className="text-2xl font-bold">{documentsCount ?? 0}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Documents</p>
+            <p className="text-[10px] text-primary mt-0.5">Open →</p>
+          </Link>
+        </div>
+      </section>
+
+      {/* Study Buddy + Leaderboard */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold">Study Buddy</h2>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <Link
+            href="/study-buddy"
+            className="flex items-center gap-3 rounded-xl border bg-card p-4 hover:bg-accent/50 transition-colors"
+          >
+            <Users className="h-5 w-5 text-primary shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium">
+                {buddyCount} {buddyCount === 1 ? 'buddy' : 'buddies'}
+              </p>
+              <p className="text-xs text-muted-foreground truncate">
+                {incomingCount > 0
+                  ? `${incomingCount} pending request${incomingCount > 1 ? 's' : ''}`
+                  : 'No pending requests'}
+              </p>
+            </div>
+          </Link>
+          <Link
+            href="/leaderboard"
+            className="flex items-center gap-3 rounded-xl border bg-card p-4 hover:bg-accent/50 transition-colors"
+          >
+            <Trophy className="h-5 w-5 text-yellow-500 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium">
+                {myRank != null && totalParticipants > 1
+                  ? `Rank #${myRank} of ${totalParticipants}`
+                  : 'Leaderboard'}
+              </p>
+              <p className="text-xs text-muted-foreground truncate">
+                {totalParticipants <= 1 ? 'Add buddies to compete' : 'This week · View →'}
+              </p>
+            </div>
+          </Link>
+        </div>
       </section>
 
       {/* Projects section */}

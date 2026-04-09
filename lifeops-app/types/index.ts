@@ -72,6 +72,7 @@ export interface Document {
   file_type: string | null
   file_size: number | null
   created_at: string
+  updated_at: string
 }
 
 export interface FocusSession {
@@ -103,6 +104,8 @@ export interface Habit {
   color: string
   icon: string | null
   is_active: boolean
+  freeze_days_available: number
+  grace_window_hours: number
   created_at: string
   updated_at: string
 }
@@ -115,10 +118,83 @@ export interface HabitLog {
   created_at: string
 }
 
+export interface HabitFreezeLog {
+  id: string
+  habit_id: string
+  user_id: string
+  freeze_date: string
+  created_at: string
+}
+
+// Phase 5A: normalized tag
+export interface Tag {
+  id: string
+  user_id: string
+  name: string
+  color: string
+  created_at: string
+}
+
+// Phase 5B: saved filter views
+export type SavedViewEntityType = 'tasks' | 'notes' | 'journal' | 'documents'
+
+export interface TaskViewFilters {
+  status?: string       // 'all' | 'todo' | 'in_progress' | 'done'
+  priority?: string     // 'all' | 'urgent' | 'high' | 'medium' | 'low'
+  tagName?: string | null
+  dueDate?: string      // 'all' | 'today' | 'this_week' | 'overdue'
+  projectId?: string | null
+}
+
+export interface NoteViewFilters {
+  pinned?: boolean
+  tagName?: string | null
+  search?: string
+  projectId?: string | null
+}
+
+export interface DocViewFilters {
+  fileType?: string | null  // 'all' | 'pdf' | 'image'
+  tagName?: string | null
+  search?: string
+  projectId?: string | null
+}
+
+export interface SavedView {
+  id: string
+  user_id: string
+  name: string
+  entity_type: SavedViewEntityType
+  filters_json: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
 export interface StudyGroup {
   id: string
   name: string
   invite_code: string
   created_by: string | null
   created_at: string
+}
+
+// Phase 6B: Leaderboard row returned by get_weekly_leaderboard()
+export interface LeaderboardEntry {
+  user_id: string
+  display_name: string
+  focus_minutes: number
+  completed_tasks: number
+  habit_completions: number
+  score: number
+  rank: number
+}
+
+// Phase 6A: Study Buddy
+export interface StudyBuddy {
+  id: string
+  requester_user_id: string
+  addressee_user_id: string
+  status: 'pending' | 'accepted' | 'declined'
+  created_at: string
+  updated_at: string
 }

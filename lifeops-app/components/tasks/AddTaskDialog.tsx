@@ -13,8 +13,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { TagInput } from '@/components/ui/tag-input'
 import { Plus } from 'lucide-react'
 import { addTask } from '@/lib/actions/tasks'
+import { setTaskTags } from '@/lib/actions/tags'
 
 interface Project {
   id: string
@@ -29,6 +31,7 @@ export function AddTaskDialog({ projects }: AddTaskDialogProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [tagNames, setTagNames] = useState<string[]>([])
   const formRef = useRef<HTMLFormElement>(null)
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -44,8 +47,14 @@ export function AddTaskDialog({ projects }: AddTaskDialogProps) {
       return
     }
 
+    // Sync tags after task is created
+    if (result.taskId && tagNames.length > 0) {
+      await setTaskTags(result.taskId, tagNames)
+    }
+
     setOpen(false)
     setLoading(false)
+    setTagNames([])
     formRef.current?.reset()
   }
 
@@ -148,6 +157,16 @@ export function AddTaskDialog({ projects }: AddTaskDialogProps) {
                   ))}
                 </select>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Tags (optional)</Label>
+              <TagInput
+                value={tagNames}
+                onChange={setTagNames}
+                placeholder="Type a tag and press Enter…"
+              />
+              <p className="text-[11px] text-muted-foreground">Press Enter or comma to add each tag.</p>
             </div>
           </div>
 

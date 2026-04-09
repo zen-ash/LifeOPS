@@ -15,30 +15,45 @@ export default async function HabitsPage() {
   sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60)
   const sixtyDaysAgoStr = `${sixtyDaysAgo.getFullYear()}-${String(sixtyDaysAgo.getMonth() + 1).padStart(2, '0')}-${String(sixtyDaysAgo.getDate()).padStart(2, '0')}`
 
-  const [{ data: habits }, { data: logs }, { data: projects }] = await Promise.all([
-    supabase
-      .from('habits')
-      .select('id, title, description, frequency, target_days_per_week, selected_weekdays, linked_project_id, is_active, created_at')
-      .eq('user_id', user!.id)
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('habit_logs')
-      .select('habit_id, logged_date')
-      .eq('user_id', user!.id)
-      .gte('logged_date', sixtyDaysAgoStr),
-    supabase
-      .from('projects')
-      .select('id, name')
-      .eq('user_id', user!.id)
-      .eq('status', 'active')
-      .order('name'),
-  ])
+  const [{ data: habits }, { data: logs }, { data: freezeLogs }, { data: projects }] =
+    await Promise.all([
+      supabase
+        .from('habits')
+        .select(
+          'id, title, description, frequency, target_days_per_week, selected_weekdays, linked_project_id, is_active, freeze_days_available, grace_window_hours, created_at'
+        )
+        .eq('user_id', user!.id)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('habit_logs')
+        .select('habit_id, logged_date')
+        .eq('user_id', user!.id)
+        .gte('logged_date', sixtyDaysAgoStr),
+      supabase
+        .from('habit_freeze_logs')
+        .select('habit_id, freeze_date')
+        .eq('user_id', user!.id)
+        .gte('freeze_date', sixtyDaysAgoStr),
+      supabase
+        .from('projects')
+        .select('id, name')
+        .eq('user_id', user!.id)
+        .eq('status', 'active')
+        .order('name'),
+    ])
 
   // Build logsMap: habitId → string[]
   const logsMap: Record<string, string[]> = {}
   for (const log of logs ?? []) {
     if (!logsMap[log.habit_id]) logsMap[log.habit_id] = []
     logsMap[log.habit_id].push(log.logged_date)
+  }
+
+  // Build freezeLogsMap: habitId → freeze date strings
+  const freezeLogsMap: Record<string, string[]> = {}
+  for (const fl of freezeLogs ?? []) {
+    if (!freezeLogsMap[fl.habit_id]) freezeLogsMap[fl.habit_id] = []
+    freezeLogsMap[fl.habit_id].push(fl.freeze_date)
   }
 
   return (
@@ -56,6 +71,7 @@ export default async function HabitsPage() {
       <HabitsView
         habits={habits ?? []}
         logsMap={logsMap}
+        freezeLogsMap={freezeLogsMap}
         today={today}
         projects={projects ?? []}
       />

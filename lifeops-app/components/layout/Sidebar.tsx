@@ -7,11 +7,13 @@ import {
   FolderOpen,
   CheckSquare,
   FileText,
+  BookOpen,
   Archive,
   Timer,
   Activity,
   Calendar,
   Users,
+  Trophy,
   Bot,
   Settings,
   Zap,
@@ -26,6 +28,7 @@ const workspaceNav = [
   { label: 'Projects', href: '/projects', icon: FolderOpen },
   { label: 'Tasks', href: '/tasks', icon: CheckSquare },
   { label: 'Notes', href: '/notes', icon: FileText },
+  { label: 'Journal', href: '/journal', icon: BookOpen },
   { label: 'Documents', href: '/documents', icon: Archive },
 ]
 
@@ -34,6 +37,7 @@ const toolsNav = [
   { label: 'Habits', href: '/habits', icon: Activity },
   { label: 'Calendar', href: '/calendar', icon: Calendar },
   { label: 'Study Buddy', href: '/study-buddy', icon: Users },
+  { label: 'Leaderboard', href: '/leaderboard', icon: Trophy },
   { label: 'AI Assistant', href: '/ai', icon: Bot },
 ]
 

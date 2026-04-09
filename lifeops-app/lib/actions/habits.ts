@@ -146,6 +146,53 @@ export async function unlogHabit(habitId: string, date: string) {
   return { success: true }
 }
 
+export async function applyFreeze(habitId: string, date: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  // Check available freeze days and whether already frozen for this date
+  const [{ data: habit, error: fetchError }, { data: existing }] = await Promise.all([
+    supabase
+      .from('habits')
+      .select('freeze_days_available')
+      .eq('id', habitId)
+      .eq('user_id', user.id)
+      .single(),
+    supabase
+      .from('habit_freeze_logs')
+      .select('id')
+      .eq('habit_id', habitId)
+      .eq('freeze_date', date)
+      .maybeSingle(),
+  ])
+
+  if (fetchError || !habit) return { error: 'Habit not found' }
+  if (existing) return { success: true } // already frozen, idempotent
+  if (habit.freeze_days_available <= 0) return { error: 'No freeze days remaining' }
+
+  // Insert freeze log
+  const { error: insertError } = await supabase
+    .from('habit_freeze_logs')
+    .insert({ habit_id: habitId, user_id: user.id, freeze_date: date })
+
+  if (insertError) return { error: insertError.message }
+
+  // Decrement freeze days
+  const { error: updateError } = await supabase
+    .from('habits')
+    .update({ freeze_days_available: habit.freeze_days_available - 1 })
+    .eq('id', habitId)
+    .eq('user_id', user.id)
+
+  if (updateError) return { error: updateError.message }
+
+  revalidateHabitPaths()
+  return { success: true }
+}
+
 export async function convertHabitToTask(habitId: string) {
   const supabase = await createClient()
   const {

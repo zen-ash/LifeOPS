@@ -9,6 +9,7 @@ const VALID_PRIORITIES = ['low', 'medium', 'high', 'urgent']
 function revalidateTaskPaths() {
   revalidatePath('/dashboard')
   revalidatePath('/tasks')
+  revalidatePath('/calendar')
 }
 
 export async function addTask(formData: FormData) {
@@ -29,20 +30,24 @@ export async function addTask(formData: FormData) {
   if (!title?.trim()) return { error: 'Task title is required' }
   if (!VALID_PRIORITIES.includes(priority)) return { error: 'Invalid priority' }
 
-  const { error } = await supabase.from('tasks').insert({
-    user_id: user.id,
-    title: title.trim(),
-    description: description?.trim() || null,
-    priority,
-    due_date: due_date || null,
-    estimated_minutes: estimated_minutes ? parseInt(estimated_minutes as string) : null,
-    project_id: project_id || null,
-  })
+  const { data: inserted, error } = await supabase
+    .from('tasks')
+    .insert({
+      user_id: user.id,
+      title: title.trim(),
+      description: description?.trim() || null,
+      priority,
+      due_date: due_date || null,
+      estimated_minutes: estimated_minutes ? parseInt(estimated_minutes as string) : null,
+      project_id: project_id || null,
+    })
+    .select('id')
+    .single()
 
   if (error) return { error: error.message }
 
   revalidateTaskPaths()
-  return { success: true }
+  return { success: true, taskId: inserted.id as string }
 }
 
 export async function editTask(taskId: string, formData: FormData) {
@@ -105,6 +110,25 @@ export async function deleteTask(taskId: string) {
   const { error } = await supabase
     .from('tasks')
     .delete()
+    .eq('id', taskId)
+    .eq('user_id', user.id)
+
+  if (error) return { error: error.message }
+
+  revalidateTaskPaths()
+  return { success: true }
+}
+
+export async function rescheduleTask(taskId: string, newDate: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('tasks')
+    .update({ due_date: newDate || null })
     .eq('id', taskId)
     .eq('user_id', user.id)
 

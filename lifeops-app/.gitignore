@@ -23,3 +23,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+# Ignore AI tools and session notes
+.claude/
+CLAUDE.md
+NEXT_CHAT_PR*
+SESSION_HAN*
+PROJECT_STAT*
+
+# Ignore extension folder
+extension/

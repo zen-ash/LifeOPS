@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,8 +12,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { TagInput } from '@/components/ui/tag-input'
 import { editTask } from '@/lib/actions/tasks'
-import type { Task } from '@/types'
+import { setTaskTags } from '@/lib/actions/tags'
+import type { Tag, Task } from '@/types'
 
 interface Project {
   id: string
@@ -23,6 +25,7 @@ interface Project {
 interface EditTaskDialogProps {
   task: Task
   projects: Project[]
+  taskTags: Tag[]
   open: boolean
   onOpenChange: (open: boolean) => void
 }
@@ -30,11 +33,21 @@ interface EditTaskDialogProps {
 export function EditTaskDialog({
   task,
   projects,
+  taskTags,
   open,
   onOpenChange,
 }: EditTaskDialogProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [tagNames, setTagNames] = useState<string[]>([])
+
+  // Reset tag names whenever the dialog opens with a (potentially different) task
+  useEffect(() => {
+    if (open) {
+      setTagNames(taskTags.map((t) => t.name))
+      setError(null)
+    }
+  }, [open, taskTags])
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -48,6 +61,9 @@ export function EditTaskDialog({
       setLoading(false)
       return
     }
+
+    // Always sync tags (also clears tags when tagNames is empty)
+    await setTaskTags(task.id, tagNames)
 
     onOpenChange(false)
     setLoading(false)
@@ -163,6 +179,11 @@ export function EditTaskDialog({
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Tags</Label>
+              <TagInput value={tagNames} onChange={setTagNames} />
             </div>
           </div>
 
