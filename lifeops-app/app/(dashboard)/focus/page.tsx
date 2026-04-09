@@ -40,7 +40,10 @@ export default async function FocusPage() {
       </div>
 
       {/* Timer */}
-      <FocusTimer tasks={tasks ?? []} projects={projects ?? []} />
+      <FocusTimer
+        tasks={(tasks ?? []).map((t) => ({ id: t.id, name: t.title }))}
+        projects={projects ?? []}
+      />
 
       {/* Session history */}
       <section>
