@@ -1,5 +1,5 @@
 # LifeOPS — Project State
-_Last updated: Phase 6B complete (Leaderboard) — next: Phase 7A (AI Assistant)_
+_Last updated: Phase 7A complete (AI Assistant) — next: Phase 7B (AI Planner)_
 
 ---
 
@@ -68,6 +68,8 @@ Soft Eng Proj/                          ← project root
     │   ├── layout.tsx                  ← root layout, ThemeProvider
     │   ├── providers.tsx
     │   ├── page.tsx                    ← landing page (public)
+    │   ├── api/
+    │   │   └── chat/route.ts           ← Phase 7A: streaming AI chat endpoint
     │   ├── auth/
     │   │   ├── login/page.tsx
     │   │   ├── register/page.tsx
@@ -87,7 +89,8 @@ Soft Eng Proj/                          ← project root
     │       ├── journal/page.tsx
     │       ├── documents/page.tsx
     │       ├── study-buddy/page.tsx
-    │       └── leaderboard/page.tsx
+    │       ├── leaderboard/page.tsx
+    │       └── assistant/page.tsx      ← Phase 7A: AI chat UI (client component)
     │
     ├── components/
     │   ├── ThemeToggle.tsx
@@ -235,7 +238,7 @@ All tables have RLS enabled with `FOR ALL USING (auth.uid() = user_id)` (or `= i
 | `/documents` | Server | ✅ |
 | `/study-buddy` | Server | ✅ |
 | `/leaderboard` | Server | ✅ |
-| `/ai` | — | ❌ 404 — Phase 7A |
+| `/assistant` | Client | ✅ Phase 7A |
 | `/settings` | — | ❌ 404 — future |
 
 ---
@@ -269,6 +272,7 @@ All tables have RLS enabled with `FOR ALL USING (auth.uid() = user_id)` (or `= i
 - ✅ Phase 5B — Smart Filters / Saved Views (named filter presets with project/dueDate/fileType, SavedViewsPanel chip strip on tasks/notes/journal/documents)
 - ✅ Phase 6A — Study Buddy Foundation (send/accept/decline/remove buddy requests by email; SECURITY DEFINER email lookup; buddy count on dashboard)
 - ✅ Phase 6B — Leaderboard (weekly ranking for self + accepted buddies; SECURITY DEFINER aggregation; score = focus_min + tasks×20 + habits×10; rank shown on dashboard)
+- ✅ Phase 7A — AI Assistant (context-aware chat at `/assistant`; Vercel AI SDK + OpenAI gpt-4o-mini; injects tasks/habits/goals as system prompt; `create_task` tool; streaming responses)
 
 ---
 
@@ -299,6 +303,7 @@ All tables have RLS enabled with `FOR ALL USING (auth.uid() = user_id)` (or `= i
 12. **`study_buddies` design** — requester/addressee model. Accept/decline enforced via `.eq('addressee_user_id', user.id)` in server actions (RLS UPDATE is open to both parties; the action narrows it). On decline, the row is deleted so the requester can retry later.
 13. **`get_weekly_leaderboard(p_timezone TEXT DEFAULT 'UTC')` RPC** — Phase 6B SECURITY DEFINER. Call via `supabase.rpc('get_weekly_leaderboard', { p_timezone: tz })`. Returns `LeaderboardEntry[]` sorted by rank ASC. Dashboard uses `'UTC'` default; the leaderboard page uses the user's `profile.timezone` for accuracy. Scoring: `focus_minutes + (completed_tasks * 20) + (habit_completions * 10)`. Week start = Monday (ISO-8601, `date_trunc('week', ...)`). Only the caller + their accepted buddies are included.
 11. **`tags.color`** — deterministic color is auto-assigned from a fixed palette based on the tag name hash in `lib/actions/tags.ts`. No user-facing color picker needed.
+12. **AI Assistant (`/assistant`)** — Phase 7A. API route at `app/api/chat/route.ts` uses Vercel AI SDK `streamText` + `@ai-sdk/openai` (gpt-4o-mini). Auth is enforced via `createClient()` inside the route — same cookie-based session as every other server action. Context (tasks, habits, profile) is fetched per-request and serialized into the system prompt. The `create_task` tool inserts directly via the server-scoped Supabase client (already authenticated). Requires `OPENAI_API_KEY` in `.env.local`. No DB schema changes needed.
 
 ---
 
@@ -307,9 +312,8 @@ All tables have RLS enabled with `FOR ALL USING (auth.uid() = user_id)` (or `= i
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+OPENAI_API_KEY=sk-...   # Required for Phase 7A AI Assistant
 ```
-
-Future: `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` for Phase 7A.
 
 ---
 
@@ -330,11 +334,12 @@ Future: `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` for Phase 7A.
 
 ## Next Recommended Phase
 
-**Phase 7A — AI Assistant**
+**Phase 7B — AI Planner**
 
-App-context-aware chat using an LLM API.
+Turn the user's goals and task list into a structured weekly plan using the AI.
 
 Key facts:
-- Will need `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` added to `.env.local`
-- Should be able to answer questions about the user's own tasks, habits, and notes
-- Keep MVP: simple chat UI at `/ai`, no persistent message history in DB required initially
+- Builds on Phase 7A's API route and context injection
+- Could be a dedicated `/planner` page or a mode within `/assistant`
+- Output: a suggested day-by-day schedule based on due dates, priorities, study hours, and habit schedule
+- Optional: "Accept plan" creates tasks automatically via `create_task` tool

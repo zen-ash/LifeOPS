@@ -38,7 +38,7 @@ const toolsNav = [
   { label: 'Calendar', href: '/calendar', icon: Calendar },
   { label: 'Study Buddy', href: '/study-buddy', icon: Users },
   { label: 'Leaderboard', href: '/leaderboard', icon: Trophy },
-  { label: 'AI Assistant', href: '/ai', icon: Bot },
+  { label: 'AI Assistant', href: '/assistant', icon: Bot },
 ]
 
 interface SidebarProps {
