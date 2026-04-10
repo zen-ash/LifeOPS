@@ -90,7 +90,7 @@
   }
 }
 
-/* Subtle entrance animation — used for dashboard sections */
+/* Subtle entrance animation — used for dashboard and planner sections */
 @keyframes fadeInUp {
   from {
     opacity: 0;
@@ -104,4 +104,21 @@
 
 .animate-fade-in-up {
   animation: fadeInUp 0.4s ease-out both;
+}
+
+/* Shimmer skeleton — used for AI generation loading state */
+@keyframes shimmer {
+  0% { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 40%,
+    hsl(var(--accent)) 55%,
+    hsl(var(--muted)) 70%
+  );
+  background-size: 300% 100%;
+  animation: shimmer 2s ease-in-out infinite;
 }

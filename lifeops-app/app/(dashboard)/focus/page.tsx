@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { FocusTimer } from '@/components/focus/FocusTimer'
 import { SessionHistory } from '@/components/focus/SessionHistory'
+import { Timer } from 'lucide-react'
 
 export default async function FocusPage() {
   const supabase = await createClient()
@@ -31,25 +32,33 @@ export default async function FocusPage() {
     ])
 
   return (
-    <div className="max-w-2xl mx-auto space-y-10">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Focus Mode</h1>
-        <p className="text-muted-foreground mt-1">
-          Run a focused work session and track your deep work time.
-        </p>
+    <div className="max-w-5xl mx-auto space-y-5">
+      {/* Page header */}
+      <div className="rounded-xl border bg-card px-6 py-4 flex items-center gap-3 animate-fade-in-up">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 shrink-0">
+          <Timer className="h-5 w-5 text-primary" />
+        </div>
+        <div>
+          <h1 className="text-base font-bold tracking-tight leading-tight">Focus Mode</h1>
+          <p className="text-xs text-muted-foreground leading-tight mt-0.5">
+            Deep work sessions — tracked and saved automatically
+          </p>
+        </div>
       </div>
 
-      {/* Timer */}
-      <FocusTimer
-        tasks={(tasks ?? []).map((t) => ({ id: t.id, name: t.title }))}
-        projects={projects ?? []}
-      />
+      {/* Main grid: timer (3/5) + history (2/5) */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+        <div className="lg:col-span-3">
+          <FocusTimer
+            tasks={(tasks ?? []).map((t) => ({ id: t.id, name: t.title }))}
+            projects={projects ?? []}
+          />
+        </div>
 
-      {/* Session history */}
-      <section>
-        <h2 className="text-xl font-semibold mb-4">Session History</h2>
-        <SessionHistory sessions={sessions ?? []} />
-      </section>
+        <div className="lg:col-span-2">
+          <SessionHistory sessions={sessions ?? []} />
+        </div>
+      </div>
     </div>
   )
 }
