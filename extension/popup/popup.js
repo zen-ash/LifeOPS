@@ -32,17 +32,62 @@ function normalizeDomain(raw) {
   d = d.split('/')[0]
   d = d.split('?')[0]
   d = d.split(':')[0]
+  d = d.split('#')[0]
   return d
 }
 
-/** Persist state and tell the background worker to update blocking rules. */
+/** Tell background to update rules, then persist state only on success. */
 async function syncState() {
-  await chrome.storage.local.set({ focusActive, blockedSites })
-  chrome.runtime.sendMessage({
-    type: 'SET_FOCUS',
-    focusActive,
-    blockedSites,
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({
+      type: 'SET_FOCUS',
+      focusActive,
+      blockedSites,
+    }, async (response) => {
+      if (chrome.runtime.lastError) {
+        console.error('[popup] sendMessage failed:', chrome.runtime.lastError.message)
+        showError('Could not update blocking rules. Try again.')
+        // Revert UI to stored state
+        await reloadFromStorage()
+        resolve()
+        return
+      }
+      if (response && !response.ok) {
+        console.error('[popup] background rule update failed:', response.error)
+        showError('Rule update failed. Check your site list.')
+        await reloadFromStorage()
+        resolve()
+        return
+      }
+      // Rules applied — now safe to persist
+      await chrome.storage.local.set({ focusActive, blockedSites })
+      resolve()
+    })
   })
+}
+
+/** Reload local state from storage and re-render (used on sync failure). */
+async function reloadFromStorage() {
+  const stored = await chrome.storage.local.get(['focusActive', 'blockedSites'])
+  focusActive  = stored.focusActive === true
+  blockedSites = Array.isArray(stored.blockedSites) ? stored.blockedSites : []
+  renderUI()
+}
+
+/** Flash a brief error message in the warning banner. */
+function showError(msg) {
+  warnBanner.textContent = msg
+  warnBanner.style.display = 'block'
+  warnBanner.style.background = '#fef2f2'
+  warnBanner.style.borderColor = '#fca5a5'
+  warnBanner.style.color = '#991b1b'
+  setTimeout(() => {
+    warnBanner.style.display = 'none'
+    warnBanner.style.background = ''
+    warnBanner.style.borderColor = ''
+    warnBanner.style.color = ''
+    warnBanner.textContent = 'Add at least one site below for blocking to take effect.'
+  }, 3000)
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
@@ -112,11 +157,17 @@ async function addSite() {
 
   const domain = normalizeDomain(raw)
 
-  // Validate: must contain at least one dot and no spaces
-  if (!domain || !domain.includes('.') || domain.includes(' ')) {
+  // Validate: basic domain format check
+  const domainPattern = /^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/
+  if (!domain || !domainPattern.test(domain)) {
+    siteInput.value = ''
+    siteInput.placeholder = 'Enter a valid domain, e.g. youtube.com'
     siteInput.style.borderColor = '#ef4444'
-    setTimeout(() => (siteInput.style.borderColor = ''), 1200)
-    siteInput.select()
+    setTimeout(() => {
+      siteInput.style.borderColor = ''
+      siteInput.placeholder = 'e.g. youtube.com'
+    }, 2000)
+    siteInput.focus()
     return
   }
 
@@ -151,10 +202,7 @@ siteInput.addEventListener('keydown', (e) => {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
 async function init() {
-  const stored = await chrome.storage.local.get(['focusActive', 'blockedSites'])
-  focusActive  = stored.focusActive  === true
-  blockedSites = Array.isArray(stored.blockedSites) ? stored.blockedSites : []
-  renderUI()
+  await reloadFromStorage()
 }
 
 init()

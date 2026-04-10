@@ -5,17 +5,17 @@
 ## File Structure
 
 ```
-extension/
 ├── manifest.json        ← Manifest V3 config
 ├── background.js        ← Service worker: manages declarativeNetRequest rules
 ├── blocked.html         ← Page shown when a blocked site is visited
+├── blocked.js           ← Script for blocked page (domain display, back button)
 ├── popup/
 │   ├── popup.html       ← Extension popup UI
-│   └── popup.js        ← Popup logic: toggle focus, manage site list
+│   └── popup.js         ← Popup logic: toggle focus, manage site list
 └── icons/
-    ├── icon16.svg
-    ├── icon48.svg
-    └── icon128.svg
+    ├── icon16.png
+    ├── icon48.png
+    └── icon128.png
 ```
 
 ## How It Works
@@ -37,7 +37,7 @@ Supabase sync would require bundling the Supabase anon key inside the extension 
 1. Open Chrome and go to `chrome://extensions`
 2. Enable **Developer mode** (top-right toggle)
 3. Click **Load unpacked**
-4. Select the `extension/` folder from this repository
+4. Select the folder containing `manifest.json`
 5. The ⚡ icon will appear in your Chrome toolbar
 
 To reload after code changes: click the refresh icon on the extension card in `chrome://extensions`.
@@ -50,10 +50,9 @@ To reload after code changes: click the refresh icon on the extension card in `c
 | `storage` | Persist blocked-sites list and focus state |
 | `host_permissions: <all_urls>` | Apply rules to any domain the user adds |
 
-## Icon Note
+## Icons
 
-Icons are SVG files. Chrome supports SVG for `action.default_icon` in development.
-For a Chrome Web Store submission, convert to PNG using any SVG→PNG tool.
+Icons are PNG files (16×16, 48×48, 128×128) as required by the Chrome Web Store.
 
 ## Known MVP Limitations
 

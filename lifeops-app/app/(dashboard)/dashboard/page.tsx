@@ -2,15 +2,29 @@ import { createClient } from '@/lib/supabase/server'
 import { AddProjectDialog } from '@/components/projects/AddProjectDialog'
 import { ProjectCard } from '@/components/projects/ProjectCard'
 import { HabitsDashboardWidget } from '@/components/habits/HabitsDashboardWidget'
-import { FolderOpen, CheckSquare, ArrowRight, Timer, FileText, BookOpen, Vault, Users, Trophy, BrainCircuit } from 'lucide-react'
+import {
+  FolderOpen,
+  CheckSquare,
+  ArrowRight,
+  Timer,
+  FileText,
+  BookOpen,
+  Vault,
+  Users,
+  Trophy,
+  BrainCircuit,
+  Activity,
+  Flame,
+} from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 
-const PRIORITY_STYLES: Record<string, string> = {
-  urgent: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-  high: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-  medium: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-  low: 'bg-secondary text-secondary-foreground',
+// ── Priority dot color ────────────────────────────────────────────────
+const PRIORITY_DOT: Record<string, string> = {
+  urgent: 'bg-red-500',
+  high: 'bg-orange-500',
+  medium: 'bg-yellow-500',
+  low: 'bg-muted-foreground/30',
 }
 
 function formatDueDate(dateStr: string): string {
@@ -33,7 +47,7 @@ function isOverdue(dateStr: string): boolean {
   return due < today
 }
 
-// ── Streak helpers (server-side, for dashboard widget) ───────────────
+// ── Streak helpers ────────────────────────────────────────────────────
 
 function shiftDate(dateStr: string, days: number): string {
   const d = new Date(dateStr + 'T00:00:00Z')
@@ -61,7 +75,11 @@ function getMonWeekStart(dateStr: string): string {
   return shiftDate(dateStr, diff)
 }
 
-function computeWeeklyStreak(today: string, targetPerWeek: number | null, logDates: string[]): number {
+function computeWeeklyStreak(
+  today: string,
+  targetPerWeek: number | null,
+  logDates: string[]
+): number {
   if (logDates.length === 0) return 0
   const dateSet = new Set(logDates)
   const target = targetPerWeek ?? 1
@@ -78,7 +96,7 @@ function computeWeeklyStreak(today: string, targetPerWeek: number | null, logDat
       streak++
       ws = shiftDate(ws, -7)
     } else if (i === 0) {
-      ws = shiftDate(ws, -7) // current week may still be in progress
+      ws = shiftDate(ws, -7)
     } else {
       break
     }
@@ -86,7 +104,6 @@ function computeWeeklyStreak(today: string, targetPerWeek: number | null, logDat
   return streak
 }
 
-// Maps JS getDay() (0=Sun…6=Sat) to our short weekday strings
 const JS_DAY_TO_SHORT = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
 
 export default async function DashboardPage() {
@@ -98,7 +115,6 @@ export default async function DashboardPage() {
   const now = new Date()
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 
-  // Date boundaries for focus stats
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
   const weekStart = new Date(
     now.getFullYear(),
@@ -141,7 +157,7 @@ export default async function DashboardPage() {
       .not('status', 'in', '("done","cancelled")')
       .not('due_date', 'is', null)
       .order('due_date', { ascending: true })
-      .limit(5),
+      .limit(8),
     supabase
       .from('focus_sessions')
       .select('actual_minutes, duration_minutes, completed')
@@ -185,22 +201,26 @@ export default async function DashboardPage() {
 
   const firstName = profile?.full_name?.split(' ')[0] ?? 'there'
 
-  // Study buddy stats
-  type BuddyRow = { id: string; requester_user_id: string; addressee_user_id: string; status: string }
+  type BuddyRow = {
+    id: string
+    requester_user_id: string
+    addressee_user_id: string
+    status: string
+  }
   const buddies = (buddyRows as BuddyRow[] | null) ?? []
   const buddyCount = buddies.filter((b) => b.status === 'accepted').length
   const incomingCount = buddies.filter(
     (b) => b.addressee_user_id === user!.id && b.status === 'pending'
   ).length
 
-  // Leaderboard rank for the dashboard snippet
   type LbRow = { user_id: string; rank: number; score: number }
   const lbRows = (leaderboardRows as LbRow[] | null) ?? []
   const myRank = lbRows.find((r) => r.user_id === user!.id)?.rank ?? null
   const totalParticipants = lbRows.length
 
-  // Focus stats
-  function sumMinutes(rows: { actual_minutes: number | null; duration_minutes: number }[] | null) {
+  function sumMinutes(
+    rows: { actual_minutes: number | null; duration_minutes: number }[] | null
+  ) {
     return (rows ?? []).reduce(
       (sum, s) => sum + (s.actual_minutes ?? s.duration_minutes),
       0
@@ -211,24 +231,18 @@ export default async function DashboardPage() {
   const weekMinutes = sumMinutes(focusWeek)
   const weekCompleted = (focusWeek ?? []).filter((s) => s.completed).length
 
-  // Habits stats
   const habitLogsMap: Record<string, string[]> = {}
   for (const log of recentHabitLogs ?? []) {
     if (!habitLogsMap[log.habit_id]) habitLogsMap[log.habit_id] = []
     habitLogsMap[log.habit_id].push(log.logged_date)
   }
 
-  // Short weekday string for today (e.g. 'mon', 'fri')
   const todayShort = JS_DAY_TO_SHORT[now.getDay()]
 
-  // Habits due today:
-  //   - daily habits: always
-  //   - weekly habits with selected days: only when today's weekday is in the list
-  //   - weekly habits with null/empty selected_weekdays: always (backward compat)
   const todayHabits = (activeHabits ?? []).filter((h) => {
     if (h.frequency === 'daily') return true
     const days: string[] = h.selected_weekdays ?? []
-    if (days.length === 0) return true   // no schedule set → show every day
+    if (days.length === 0) return true
     return days.includes(todayShort)
   })
 
@@ -243,266 +257,333 @@ export default async function DashboardPage() {
   }))
 
   const todayHabitIds = new Set(todayHabits.map((h) => h.id))
-  // Only count completions for habits that are actually due today
   const completedTodayIds = (recentHabitLogs ?? [])
     .filter((l) => l.logged_date === today && todayHabitIds.has(l.habit_id))
     .map((l) => l.habit_id)
 
   const bestStreak = Math.max(0, ...todayHabitsWithStreak.map((h) => h.streak))
 
+  // Split tasks into overdue vs upcoming
+  const overdueTasks = (upcomingTasks ?? []).filter((t) => t.due_date && isOverdue(t.due_date))
+  const nonOverdueTasks = (upcomingTasks ?? []).filter(
+    (t) => !t.due_date || !isOverdue(t.due_date)
+  )
+  const pendingCount = (upcomingTasks ?? []).length
+
   return (
-    <div className="max-w-5xl mx-auto space-y-8">
-      {/* Welcome banner */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">
-          Good day, {firstName} 👋
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Here&apos;s an overview of your workspace.
-        </p>
-      </div>
+    <div className="max-w-6xl mx-auto space-y-5 pb-8">
 
-      {/* Profile card */}
-      {profile && (
-        <div className="rounded-xl border bg-card p-5 space-y-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Your profile
-          </p>
-
-          {profile.goals && profile.goals.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {profile.goals.map((goal: string) => (
-                <span
-                  key={goal}
-                  className="text-xs bg-primary/10 text-primary px-2.5 py-1 rounded-full font-medium"
-                >
-                  {goal}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {profile.priorities && profile.priorities.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {profile.priorities.map((p: string) => (
-                <span
-                  key={p}
-                  className="text-xs bg-secondary text-secondary-foreground px-2.5 py-1 rounded-full"
-                >
-                  {p}
-                </span>
-              ))}
-            </div>
-          )}
-
-          <p className="text-xs text-muted-foreground pt-0.5">
-            <span className="font-medium text-foreground">Timezone:</span>{' '}
-            {profile.timezone ?? 'UTC'}
-            {profile.study_hours_per_week != null && (
-              <>
-                {' · '}
-                <span className="font-medium text-foreground">
-                  {profile.study_hours_per_week}h
-                </span>{' '}
-                / week
-              </>
-            )}
-          </p>
-        </div>
-      )}
-
-      {/* Focus summary */}
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold">Focus</h2>
-          <Link
-            href="/focus"
-            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Open Focus Mode
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {[
-            { label: 'Today', value: `${todayMinutes}m`, sub: 'focused' },
-            { label: 'This week', value: `${weekMinutes}m`, sub: 'focused' },
-            {
-              label: 'Sessions',
-              value: String(weekCompleted),
-              sub: 'completed this week',
-            },
-          ].map(({ label, value, sub }) => (
-            <div
-              key={label}
-              className="rounded-xl border bg-card p-4 flex flex-col items-center text-center"
-            >
-              <Timer className="h-5 w-5 text-primary mb-2" />
-              <p className="text-2xl font-bold">{value}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">{label}</p>
-              <p className="text-[10px] text-muted-foreground">{sub}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Habits widget */}
-      <HabitsDashboardWidget
-        activeCount={(activeHabits ?? []).length}
-        completedTodayCount={completedTodayIds.length}
-        bestStreak={bestStreak}
-        todayHabits={todayHabitsWithStreak}
-        today={today}
-        completedTodayIds={completedTodayIds}
-      />
-
-      {/* Upcoming Tasks */}
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold">Upcoming Tasks</h2>
-          <Link
-            href="/tasks"
-            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            View all
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-
-        {upcomingTasks && upcomingTasks.length > 0 ? (
-          <div className="rounded-xl border bg-card divide-y">
-            {upcomingTasks.map((task) => (
-              <div key={task.id} className="flex items-center gap-3 px-4 py-3">
-                <CheckSquare className="h-4 w-4 shrink-0 text-muted-foreground/50" />
-                <p className="flex-1 text-sm font-medium truncate">{task.title}</p>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span
-                    className={cn(
-                      'text-[11px] font-medium px-1.5 py-0.5 rounded capitalize',
-                      PRIORITY_STYLES[task.priority]
-                    )}
-                  >
-                    {task.priority}
-                  </span>
-                  {task.due_date && (
-                    <span
-                      className={cn(
-                        'text-xs',
-                        isOverdue(task.due_date)
-                          ? 'text-destructive font-medium'
-                          : 'text-muted-foreground'
-                      )}
-                    >
-                      {formatDueDate(task.due_date)}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
+      {/* ── Today Hero ──────────────────────────────────────────────── */}
+      <section className="animate-fade-in-up rounded-xl border bg-card overflow-hidden">
+        <div className="px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+              Today
+            </p>
+            <h1 className="text-2xl font-bold tracking-tight">Good day, {firstName}</h1>
           </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-10 border-2 border-dashed rounded-xl text-muted-foreground">
-            <CheckSquare className="h-8 w-8 mb-2 opacity-30" />
-            <p className="text-sm font-medium">No upcoming tasks with due dates</p>
-            <Link href="/tasks" className="text-xs mt-1 text-primary hover:underline">
-              Go to Tasks →
-            </Link>
+
+          {/* KPI chips */}
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            <div className="flex flex-col items-center rounded-lg bg-muted/50 px-4 py-2.5 min-w-[64px] text-center">
+              <p className="text-lg font-bold leading-none tabular-nums">{todayMinutes}m</p>
+              <p className="text-[10px] text-muted-foreground mt-1">focused</p>
+            </div>
+            <div className="flex flex-col items-center rounded-lg bg-muted/50 px-4 py-2.5 min-w-[64px] text-center">
+              <p className="text-lg font-bold leading-none tabular-nums">
+                {completedTodayIds.length}/{todayHabits.length}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-1">habits</p>
+            </div>
+            <div className="flex flex-col items-center rounded-lg bg-muted/50 px-4 py-2.5 min-w-[64px] text-center">
+              <p className="text-lg font-bold leading-none tabular-nums">{pendingCount}</p>
+              <p className="text-[10px] text-muted-foreground mt-1">pending</p>
+            </div>
+            {myRank != null && totalParticipants > 1 && (
+              <div className="flex flex-col items-center rounded-lg bg-primary/10 px-4 py-2.5 min-w-[64px] text-center">
+                <p className="text-lg font-bold leading-none text-primary tabular-nums">
+                  #{myRank}
+                </p>
+                <p className="text-[10px] text-muted-foreground mt-1">ranked</p>
+              </div>
+            )}
+            {bestStreak > 0 && (
+              <div className="flex flex-col items-center rounded-lg bg-orange-500/10 px-4 py-2.5 min-w-[64px] text-center">
+                <p className="text-lg font-bold leading-none text-orange-500 flex items-center gap-0.5">
+                  <Flame className="h-4 w-4" />
+                  {bestStreak}
+                </p>
+                <p className="text-[10px] text-muted-foreground mt-1">streak</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Goals strip */}
+        {profile?.goals && profile.goals.length > 0 && (
+          <div className="border-t border-border/50 px-6 py-2.5 flex items-center gap-2 bg-muted/20 overflow-x-auto">
+            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider whitespace-nowrap shrink-0">
+              Goals
+            </p>
+            {profile.goals.map((goal: string) => (
+              <span
+                key={goal}
+                className="text-[11px] bg-primary/10 text-primary px-2.5 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0"
+              >
+                {goal}
+              </span>
+            ))}
           </div>
         )}
       </section>
 
-      {/* Notes, Journal & Documents */}
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold">Notes & Documents</h2>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Link
-            href="/notes"
-            className="rounded-xl border bg-card p-4 flex flex-col items-center text-center hover:bg-accent/50 transition-colors"
-          >
-            <FileText className="h-5 w-5 text-primary mb-2" />
-            <p className="text-2xl font-bold">{notesCount ?? 0}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Notes</p>
-            <p className="text-[10px] text-primary mt-0.5">Open →</p>
-          </Link>
-          <Link
-            href="/journal"
-            className="rounded-xl border bg-card p-4 flex flex-col items-center text-center hover:bg-accent/50 transition-colors"
-          >
-            <BookOpen className="h-5 w-5 text-primary mb-2" />
-            <p className="text-2xl font-bold">{journalCount ?? 0}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Journal</p>
-            <p className="text-[10px] text-primary mt-0.5">Open →</p>
-          </Link>
-          <Link
-            href="/documents"
-            className="rounded-xl border bg-card p-4 flex flex-col items-center text-center hover:bg-accent/50 transition-colors"
-          >
-            <Vault className="h-5 w-5 text-primary mb-2" />
-            <p className="text-2xl font-bold">{documentsCount ?? 0}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Documents</p>
-            <p className="text-[10px] text-primary mt-0.5">Open →</p>
-          </Link>
-        </div>
-      </section>
+      {/* ── Main grid: Tasks (2/3) + Right column (1/3) ─────────────── */}
+      <div
+        className="grid grid-cols-1 lg:grid-cols-3 gap-5 animate-fade-in-up"
+        style={{ animationDelay: '80ms' }}
+      >
+        {/* Tasks panel — spans 2 cols on large screens */}
+        <div className="lg:col-span-2 rounded-xl border bg-card overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-border/50 shrink-0">
+            <div className="flex items-center gap-2">
+              <CheckSquare className="h-4 w-4 text-muted-foreground/60" />
+              <span className="text-sm font-semibold">Upcoming Tasks</span>
+              {pendingCount > 0 && (
+                <span className="text-[11px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full font-medium tabular-nums">
+                  {pendingCount}
+                </span>
+              )}
+            </div>
+            <Link
+              href="/tasks"
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              View all
+              <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
 
-      {/* Study Buddy + Leaderboard + AI Planner */}
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold">Study Buddy</h2>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Link
-            href="/study-buddy"
-            className="flex items-center gap-3 rounded-xl border bg-card p-4 hover:bg-accent/50 transition-colors"
-          >
-            <Users className="h-5 w-5 text-primary shrink-0" />
-            <div className="min-w-0">
-              <p className="text-sm font-medium">
-                {buddyCount} {buddyCount === 1 ? 'buddy' : 'buddies'}
-              </p>
-              <p className="text-xs text-muted-foreground truncate">
-                {incomingCount > 0
-                  ? `${incomingCount} pending request${incomingCount > 1 ? 's' : ''}`
-                  : 'No pending requests'}
-              </p>
+          {/* Overdue zone */}
+          {overdueTasks.length > 0 && (
+            <div className="border-b border-destructive/20 bg-destructive/[0.035]">
+              <div className="flex items-center gap-1.5 px-5 pt-3 pb-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-destructive shrink-0" />
+                <p className="text-[11px] font-semibold text-destructive/70 uppercase tracking-wider">
+                  Overdue · {overdueTasks.length}
+                </p>
+              </div>
+              {overdueTasks.map((task) => (
+                <div
+                  key={task.id}
+                  className="flex items-center gap-3 px-5 py-2.5 hover:bg-destructive/5 transition-colors"
+                >
+                  <div
+                    className={cn(
+                      'w-1.5 h-1.5 rounded-full shrink-0',
+                      PRIORITY_DOT[task.priority]
+                    )}
+                  />
+                  <p className="flex-1 text-sm font-medium truncate">{task.title}</p>
+                  <span className="text-xs font-medium text-destructive shrink-0">
+                    {formatDueDate(task.due_date!)}
+                  </span>
+                </div>
+              ))}
             </div>
-          </Link>
-          <Link
-            href="/leaderboard"
-            className="flex items-center gap-3 rounded-xl border bg-card p-4 hover:bg-accent/50 transition-colors"
-          >
-            <Trophy className="h-5 w-5 text-yellow-500 shrink-0" />
-            <div className="min-w-0">
-              <p className="text-sm font-medium">
-                {myRank != null && totalParticipants > 1
-                  ? `Rank #${myRank} of ${totalParticipants}`
-                  : 'Leaderboard'}
-              </p>
-              <p className="text-xs text-muted-foreground truncate">
-                {totalParticipants <= 1 ? 'Add buddies to compete' : 'This week · View →'}
-              </p>
-            </div>
-          </Link>
-          <Link
-            href="/planner"
-            className="flex items-center gap-3 rounded-xl border bg-card p-4 hover:bg-accent/50 transition-colors"
-          >
-            <BrainCircuit className="h-5 w-5 text-violet-500 shrink-0" />
-            <div className="min-w-0">
-              <p className="text-sm font-medium">AI Planner</p>
-              <p className="text-xs text-muted-foreground truncate">Weekly plan →</p>
-            </div>
-          </Link>
-        </div>
-      </section>
+          )}
 
-      {/* Projects section */}
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold">Projects</h2>
+          {/* Non-overdue tasks */}
+          {nonOverdueTasks.length > 0 ? (
+            <div className="divide-y divide-border/40 flex-1">
+              {nonOverdueTasks.map((task) => (
+                <div
+                  key={task.id}
+                  className="flex items-center gap-3 px-5 py-3 hover:bg-muted/20 transition-colors"
+                >
+                  <div
+                    className={cn(
+                      'w-1.5 h-1.5 rounded-full shrink-0',
+                      PRIORITY_DOT[task.priority]
+                    )}
+                  />
+                  <p className="flex-1 text-sm font-medium truncate">{task.title}</p>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {task.due_date ? formatDueDate(task.due_date) : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : overdueTasks.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-14 text-muted-foreground flex-1">
+              <CheckSquare className="h-7 w-7 mb-2 opacity-20" />
+              <p className="text-sm font-medium">All clear</p>
+              <p className="text-xs text-muted-foreground/70 mt-0.5">
+                No upcoming tasks with due dates
+              </p>
+              <Link href="/tasks" className="text-xs mt-3 text-primary hover:underline">
+                Add tasks →
+              </Link>
+            </div>
+          ) : null}
+        </div>
+
+        {/* Right column: Habits + Focus stacked */}
+        <div className="flex flex-col gap-5">
+          <HabitsDashboardWidget
+            activeCount={(activeHabits ?? []).length}
+            completedTodayCount={completedTodayIds.length}
+            bestStreak={bestStreak}
+            todayHabits={todayHabitsWithStreak}
+            today={today}
+            completedTodayIds={completedTodayIds}
+          />
+
+          {/* Focus compact */}
+          <div className="rounded-xl border bg-card overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-border/50">
+              <div className="flex items-center gap-2">
+                <Timer className="h-4 w-4 text-muted-foreground/60" />
+                <span className="text-sm font-semibold">Focus</span>
+              </div>
+              <Link
+                href="/focus"
+                className="text-xs text-primary hover:text-primary/70 font-medium transition-colors"
+              >
+                Start →
+              </Link>
+            </div>
+            <div className="grid grid-cols-3 divide-x divide-border/50">
+              <div className="flex flex-col items-center py-4 px-2 text-center">
+                <p className="text-xl font-bold tabular-nums">{todayMinutes}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">min today</p>
+              </div>
+              <div className="flex flex-col items-center py-4 px-2 text-center">
+                <p className="text-xl font-bold tabular-nums">{weekMinutes}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">min/week</p>
+              </div>
+              <div className="flex flex-col items-center py-4 px-2 text-center">
+                <p className="text-xl font-bold tabular-nums">{weekCompleted}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">sessions</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Bottom row: Knowledge + Social + AI ─────────────────────── */}
+      <div
+        className="grid grid-cols-1 sm:grid-cols-3 gap-5 animate-fade-in-up"
+        style={{ animationDelay: '160ms' }}
+      >
+        {/* Knowledge */}
+        <div className="rounded-xl border bg-card overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border/50">
+            <FileText className="h-4 w-4 text-muted-foreground/60" />
+            <span className="text-sm font-semibold">Knowledge</span>
+          </div>
+          <div className="divide-y divide-border/40">
+            <Link
+              href="/notes"
+              className="flex items-center justify-between px-5 py-2.5 hover:bg-muted/20 transition-colors"
+            >
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <FileText className="h-3.5 w-3.5" />
+                Notes
+              </div>
+              <span className="text-sm font-semibold tabular-nums">{notesCount ?? 0}</span>
+            </Link>
+            <Link
+              href="/journal"
+              className="flex items-center justify-between px-5 py-2.5 hover:bg-muted/20 transition-colors"
+            >
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <BookOpen className="h-3.5 w-3.5" />
+                Journal
+              </div>
+              <span className="text-sm font-semibold tabular-nums">{journalCount ?? 0}</span>
+            </Link>
+            <Link
+              href="/documents"
+              className="flex items-center justify-between px-5 py-2.5 hover:bg-muted/20 transition-colors"
+            >
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Vault className="h-3.5 w-3.5" />
+                Documents
+              </div>
+              <span className="text-sm font-semibold tabular-nums">{documentsCount ?? 0}</span>
+            </Link>
+          </div>
+        </div>
+
+        {/* Social */}
+        <div className="rounded-xl border bg-card overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border/50">
+            <Users className="h-4 w-4 text-muted-foreground/60" />
+            <span className="text-sm font-semibold">Social</span>
+          </div>
+          <div className="divide-y divide-border/40">
+            <Link
+              href="/study-buddy"
+              className="flex items-center justify-between px-5 py-2.5 hover:bg-muted/20 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Study Buddies</span>
+                {incomingCount > 0 && (
+                  <span className="text-[10px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full font-medium">
+                    {incomingCount}
+                  </span>
+                )}
+              </div>
+              <span className="text-sm font-semibold tabular-nums">{buddyCount}</span>
+            </Link>
+            <Link
+              href="/leaderboard"
+              className="flex items-center justify-between px-5 py-2.5 hover:bg-muted/20 transition-colors"
+            >
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Trophy className="h-3.5 w-3.5 text-yellow-500" />
+                Weekly rank
+              </div>
+              <span className="text-sm font-semibold">
+                {myRank != null && totalParticipants > 1 ? `#${myRank}` : '—'}
+              </span>
+            </Link>
+          </div>
+        </div>
+
+        {/* AI Planner */}
+        <Link
+          href="/planner"
+          className="rounded-xl border bg-card hover:bg-accent/30 transition-colors overflow-hidden flex flex-col"
+        >
+          <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border/50">
+            <BrainCircuit className="h-4 w-4 text-violet-500" />
+            <span className="text-sm font-semibold">AI Planner</span>
+          </div>
+          <div className="flex-1 px-5 py-4 flex flex-col">
+            <p className="text-sm text-muted-foreground">
+              Get your AI-generated weekly plan
+            </p>
+            <p className="text-xs text-primary font-medium mt-auto pt-3">Generate plan →</p>
+          </div>
+        </Link>
+      </div>
+
+      {/* ── Projects ─────────────────────────────────────────────────── */}
+      <section
+        className="animate-fade-in-up"
+        style={{ animationDelay: '240ms' }}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <FolderOpen className="h-4 w-4 text-muted-foreground/60" />
+            <h2 className="text-sm font-semibold">Projects</h2>
+            {projects && projects.length > 0 && (
+              <span className="text-[11px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full font-medium">
+                {projects.length}
+              </span>
+            )}
+          </div>
           <AddProjectDialog />
         </div>
 
@@ -513,15 +594,44 @@ export default async function DashboardPage() {
             ))}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed rounded-xl text-muted-foreground">
-            <FolderOpen className="h-12 w-12 mb-3 opacity-30" />
-            <p className="font-medium">No projects yet</p>
-            <p className="text-sm mt-1">
-              Create your first project to get started.
+          <div className="flex flex-col items-center justify-center py-14 border-2 border-dashed rounded-xl text-muted-foreground">
+            <FolderOpen className="h-8 w-8 mb-2 opacity-20" />
+            <p className="text-sm font-medium">No projects yet</p>
+            <p className="text-xs mt-0.5 text-muted-foreground/70">
+              Create your first project to get started
             </p>
           </div>
         )}
       </section>
+
+      {/* ── Profile strip (secondary) ────────────────────────────────── */}
+      {profile &&
+        ((profile.priorities && profile.priorities.length > 0) ||
+          profile.study_hours_per_week != null) && (
+          <div
+            className="rounded-xl border bg-card/50 px-5 py-3 animate-fade-in-up"
+            style={{ animationDelay: '320ms' }}
+          >
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <Activity className="h-3.5 w-3.5 text-muted-foreground/50" />
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  Profile
+                </p>
+              </div>
+              {profile.priorities?.map((p: string) => (
+                <span key={p} className="text-xs text-muted-foreground">
+                  {p}
+                </span>
+              ))}
+              {profile.study_hours_per_week != null && (
+                <span className="text-xs text-muted-foreground ml-auto">
+                  {profile.study_hours_per_week}h/week · {profile.timezone ?? 'UTC'}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
     </div>
   )
 }

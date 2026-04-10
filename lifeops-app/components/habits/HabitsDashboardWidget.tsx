@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, Circle, Flame, ArrowRight, Activity } from 'lucide-react'
+import { CheckCircle2, Circle, Flame, Activity } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { logHabit, unlogHabit } from '@/lib/actions/habits'
@@ -24,7 +24,6 @@ interface HabitsDashboardWidgetProps {
 
 export function HabitsDashboardWidget({
   activeCount,
-  completedTodayCount,
   bestStreak,
   todayHabits,
   today,
@@ -36,7 +35,6 @@ export function HabitsDashboardWidget({
   async function handleToggle(habitId: string) {
     if (pending) return
     const done = completedIds.has(habitId)
-    // Optimistic update
     setCompletedIds((prev) => {
       const next = new Set(prev)
       if (done) next.delete(habitId)
@@ -52,73 +50,68 @@ export function HabitsDashboardWidget({
     setPending(null)
   }
 
-  // Count only completions for habits that are due today (in the quick list)
   const todayHabitIdSet = new Set(todayHabits.map((h) => h.id))
   const completedNow = [...completedIds].filter((id) => todayHabitIdSet.has(id)).length
+  const total = todayHabits.length
+  const pct = total > 0 ? Math.round((completedNow / total) * 100) : 0
 
   return (
-    <section>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold">Habits</h2>
+    <div className="rounded-xl border bg-card overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-border/50">
+        <div className="flex items-center gap-2">
+          <Activity className="h-4 w-4 text-muted-foreground/60" />
+          <span className="text-sm font-semibold">Habits</span>
+          {bestStreak > 0 && (
+            <span className="flex items-center gap-0.5 text-[11px] font-medium text-orange-500">
+              <Flame className="h-3 w-3" />
+              {bestStreak}
+            </span>
+          )}
+        </div>
         <Link
           href="/habits"
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
-          All habits
-          <ArrowRight className="h-3.5 w-3.5" />
+          All →
         </Link>
       </div>
 
       {activeCount === 0 ? (
-        <div className="flex flex-col items-center justify-center py-8 border-2 border-dashed rounded-xl text-muted-foreground">
-          <Activity className="h-8 w-8 mb-2 opacity-30" />
-          <p className="text-sm font-medium">No habits yet</p>
-          <Link href="/habits" className="text-xs mt-1 text-primary hover:underline">
-            Create your first habit →
+        <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+          <Activity className="h-6 w-6 mb-2 opacity-20" />
+          <p className="text-xs">No habits yet</p>
+          <Link href="/habits" className="text-xs mt-1.5 text-primary hover:underline">
+            Create one →
           </Link>
         </div>
       ) : (
         <>
-          {/* Summary stats */}
-          <div className="grid grid-cols-3 gap-4 mb-4">
-            {[
-              { label: 'Active', value: String(activeCount), sub: 'habits', flame: false },
-              {
-                label: 'Today',
-                value: `${completedNow}/${todayHabits.length}`,
-                sub: 'completed',
-                flame: false,
-              },
-              {
-                label: 'Best streak',
-                value: String(bestStreak),
-                sub: bestStreak === 1 ? 'day / week' : 'days / weeks',
-                flame: bestStreak > 0,
-              },
-            ].map(({ label, value, sub, flame }) => (
-              <div
-                key={label}
-                className="rounded-xl border bg-card p-4 flex flex-col items-center text-center"
-              >
-                {flame ? (
-                  <Flame className="h-5 w-5 text-orange-500 mb-2" />
-                ) : (
-                  <Activity className="h-5 w-5 text-primary mb-2" />
-                )}
-                <p className="text-2xl font-bold">{value}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">{label}</p>
-                <p className="text-[10px] text-muted-foreground">{sub}</p>
+          {/* Progress bar */}
+          {total > 0 && (
+            <div className="px-5 pt-3 pb-2.5">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[11px] text-muted-foreground">
+                  {completedNow}/{total} done today
+                </p>
+                <p className="text-[11px] text-muted-foreground tabular-nums">{pct}%</p>
               </div>
-            ))}
-          </div>
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+          )}
 
-          {/* Quick check-off for today's habits */}
+          {/* Habit checklist */}
           {todayHabits.length > 0 && (
-            <div className="rounded-xl border bg-card divide-y">
-              {todayHabits.map((habit: TodayHabit) => {
+            <div className="pb-1.5">
+              {todayHabits.map((habit) => {
                 const done = completedIds.has(habit.id)
                 return (
-                  <div key={habit.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <div key={habit.id} className="flex items-center gap-2.5 px-5 py-2">
                     <button
                       type="button"
                       onClick={() => handleToggle(habit.id)}
@@ -135,16 +128,16 @@ export function HabitsDashboardWidget({
 
                     <p
                       className={cn(
-                        'flex-1 text-sm font-medium truncate',
-                        done && 'line-through text-muted-foreground'
+                        'flex-1 text-sm truncate',
+                        done ? 'line-through text-muted-foreground' : 'font-medium'
                       )}
                     >
                       {habit.title}
                     </p>
 
                     {habit.streak > 0 && (
-                      <span className="flex items-center gap-0.5 text-[11px] text-orange-500 font-medium shrink-0">
-                        <Flame className="h-3 w-3" />
+                      <span className="flex items-center gap-0.5 text-[10px] text-orange-500 font-medium shrink-0">
+                        <Flame className="h-2.5 w-2.5" />
                         {habit.streak}
                       </span>
                     )}
@@ -155,6 +148,6 @@ export function HabitsDashboardWidget({
           )}
         </>
       )}
-    </section>
+    </div>
   )
 }

@@ -74,17 +74,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 // ── On install / startup ──────────────────────────────────────────────────────
 
 /**
- * Restore blocking rules on service-worker startup (e.g. after browser restart).
- * Dynamic rules are lost when the browser is closed; storage is not.
+ * Restore blocking rules on service-worker startup.
+ * Dynamic rules persist across sessions, but this ensures they are
+ * consistent with the stored focus state.
  */
 async function restoreRulesFromStorage() {
   const { focusActive, blockedSites } = await chrome.storage.local.get([
     'focusActive',
     'blockedSites',
   ])
-  if (focusActive && Array.isArray(blockedSites) && blockedSites.length > 0) {
-    await updateBlockingRules(true, blockedSites)
-  }
+  await updateBlockingRules(
+    focusActive === true,
+    Array.isArray(blockedSites) ? blockedSites : []
+  )
 }
 
 chrome.runtime.onInstalled.addListener(restoreRulesFromStorage)
