@@ -1,6 +1,7 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
+import { Menu, LogOut, Settings, User } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { Button } from '@/components/ui/button'
@@ -13,7 +14,22 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { LogOut, Settings, User } from 'lucide-react'
+
+const pageLabels: Record<string, string> = {
+  '/dashboard': 'Dashboard',
+  '/projects': 'Projects',
+  '/tasks': 'Tasks',
+  '/focus': 'Focus Mode',
+  '/habits': 'Habits',
+  '/calendar': 'Calendar',
+  '/notes': 'Notes',
+  '/journal': 'Journal',
+  '/documents': 'Documents',
+  '/study-buddy': 'Study Buddy',
+  '/leaderboard': 'Leaderboard',
+  '/assistant': 'AI Assistant',
+  '/planner': 'AI Planner',
+}
 
 interface HeaderProps {
   profile: {
@@ -21,17 +37,15 @@ interface HeaderProps {
     avatar_url: string | null
     email: string | null
   } | null
+  onMenuClick: () => void
 }
 
-export function Header({ profile }: HeaderProps) {
+export function Header({ profile, onMenuClick }: HeaderProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const supabase = createClient()
 
-  async function handleLogout() {
-    await supabase.auth.signOut()
-    router.push('/auth/login')
-    router.refresh()
-  }
+  const pageTitle = pageLabels[pathname] ?? 'LifeOPS'
 
   const initials =
     profile?.full_name
@@ -41,21 +55,36 @@ export function Header({ profile }: HeaderProps) {
       .toUpperCase()
       .slice(0, 2) ?? '?'
 
-  return (
-    <header className="h-14 border-b bg-card flex items-center justify-between px-6 shrink-0">
-      {/* Left side — breadcrumbs will go here in later phases */}
-      <div />
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    router.push('/auth/login')
+    router.refresh()
+  }
 
-      {/* Right side — theme toggle + user menu */}
-      <div className="flex items-center gap-2">
+  return (
+    <header className="h-14 border-b border-border/60 bg-card flex items-center justify-between px-4 md:px-6 shrink-0">
+      {/* Left: mobile menu button + page title */}
+      <div className="flex items-center gap-3">
+        <button
+          className="md:hidden rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          onClick={onMenuClick}
+          aria-label="Open navigation"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <h1 className="text-sm font-semibold tracking-tight">{pageTitle}</h1>
+      </div>
+
+      {/* Right: theme toggle + user menu */}
+      <div className="flex items-center gap-1">
         <ThemeToggle />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-8 w-8 rounded-full p-0">
+            <Button variant="ghost" className="relative h-8 w-8 rounded-full p-0 ml-1">
               <Avatar className="h-8 w-8">
                 <AvatarImage src={profile?.avatar_url ?? undefined} />
-                <AvatarFallback className="text-xs bg-primary text-primary-foreground">
+                <AvatarFallback className="text-xs bg-primary text-primary-foreground font-medium">
                   {initials}
                 </AvatarFallback>
               </Avatar>
@@ -65,9 +94,7 @@ export function Header({ profile }: HeaderProps) {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>
               <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-medium">
-                  {profile?.full_name ?? 'User'}
-                </span>
+                <span className="text-sm font-medium">{profile?.full_name ?? 'User'}</span>
                 <span className="text-xs text-muted-foreground font-normal">
                   {profile?.email}
                 </span>

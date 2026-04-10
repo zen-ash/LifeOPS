@@ -4,49 +4,80 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Light mode — subtle cool-white base */
+    --background: 240 20% 98.5%;
+    --foreground: 240 8% 12%;
+
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 240 8% 12%;
+
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    /* Indigo as brand primary */
-    --primary: 239 84% 67%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 239 84% 67%;
+    --popover-foreground: 240 8% 12%;
+
+    /* Sidebar slightly off-white to separate from content */
+    --sidebar: 240 14% 97%;
+    --sidebar-foreground: 240 8% 12%;
+
+    /* Indigo brand primary */
+    --primary: 245 82% 60%;
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 240 8% 94%;
+    --secondary-foreground: 240 8% 20%;
+
+    --muted: 240 8% 94%;
+    --muted-foreground: 240 4% 45%;
+
+    --accent: 240 8% 93%;
+    --accent-foreground: 240 8% 20%;
+
+    --destructive: 0 78% 52%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 6% 88%;
+    --input: 240 6% 88%;
+    --ring: 245 82% 60%;
     --radius: 0.5rem;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 239 84% 67%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 239 84% 67%;
+    /* Dark mode — near-black neutral base, not blue-gray */
+    --background: 240 10% 5.5%;
+    --foreground: 220 14% 91%;
+
+    /* Card — visibly lighter than background for surface hierarchy */
+    --card: 240 8% 8.5%;
+    --card-foreground: 220 14% 91%;
+
+    /* Popover — elevated above card */
+    --popover: 240 8% 11%;
+    --popover-foreground: 220 14% 91%;
+
+    /* Sidebar — sits between background and card */
+    --sidebar: 240 10% 7%;
+    --sidebar-foreground: 220 14% 91%;
+
+    /* Indigo primary — slightly more vibrant in dark */
+    --primary: 245 82% 66%;
+    --primary-foreground: 240 10% 98%;
+
+    --secondary: 240 6% 14%;
+    --secondary-foreground: 220 14% 78%;
+
+    --muted: 240 6% 13%;
+    --muted-foreground: 240 4% 50%;
+
+    /* Accent — hover background, clearly distinct from sidebar */
+    --accent: 240 6% 15%;
+    --accent-foreground: 220 14% 88%;
+
+    --destructive: 0 72% 58%;
+    --destructive-foreground: 0 0% 98%;
+
+    /* Borders — visible but restrained */
+    --border: 240 6% 16%;
+    --input: 240 6% 12%;
+    --ring: 245 82% 66%;
   }
 }
 
