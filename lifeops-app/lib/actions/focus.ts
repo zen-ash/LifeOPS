@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { logEvent } from '@/lib/actions/activityLog'
 
 interface SaveSessionInput {
   goal: string | null
@@ -13,6 +14,7 @@ interface SaveSessionInput {
   ended_at: string     // ISO string recorded on the client when session ended
   task_id: string | null
   project_id: string | null
+  from_planner?: boolean // Phase 11.F: true when launched via Planner → Focus handoff
 }
 
 export async function saveSession(input: SaveSessionInput) {
@@ -41,6 +43,19 @@ export async function saveSession(input: SaveSessionInput) {
     .single()
 
   if (error) return { error: error.message }
+
+  await logEvent(supabase, user.id, {
+    event_type: input.completed ? 'focus_session_completed' : 'focus_session_stopped_early',
+    entity_type: 'focus_session',
+    entity_id: data.id,
+    payload: {
+      duration_minutes: input.duration_minutes,
+      actual_minutes: input.actual_minutes,
+      type: input.type,
+      goal: input.goal ?? null,
+      from_planner: input.from_planner ?? false,
+    },
+  })
 
   revalidatePath('/focus')
   revalidatePath('/dashboard')

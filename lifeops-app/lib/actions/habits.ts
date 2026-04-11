@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { logEvent } from '@/lib/actions/activityLog'
 
 const VALID_FREQUENCIES = ['daily', 'weekly']
 
@@ -122,6 +123,13 @@ export async function logHabit(habitId: string, date: string) {
 
   if (error) return { error: error.message }
 
+  await logEvent(supabase, user.id, {
+    event_type: 'habit_checked',
+    entity_type: 'habit',
+    entity_id: habitId,
+    payload: { date },
+  })
+
   revalidateHabitPaths()
   return { success: true }
 }
@@ -141,6 +149,13 @@ export async function unlogHabit(habitId: string, date: string) {
     .eq('logged_date', date)
 
   if (error) return { error: error.message }
+
+  await logEvent(supabase, user.id, {
+    event_type: 'habit_skipped',
+    entity_type: 'habit',
+    entity_id: habitId,
+    payload: { date },
+  })
 
   revalidateHabitPaths()
   return { success: true }

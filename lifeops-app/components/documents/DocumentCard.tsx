@@ -1,7 +1,15 @@
 'use client'
 
 import { useState } from 'react'
-import { FileText, Image as ImageIcon, File, Download, Trash2, Loader2, Pencil } from 'lucide-react'
+import {
+  FileText,
+  Image as ImageIcon,
+  File,
+  Download,
+  Trash2,
+  Loader2,
+  Pencil,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -51,57 +59,58 @@ function formatSize(bytes: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
+function formatRelativeDate(dateStr: string): string {
+  const d = new Date(dateStr)
+  const now = new Date()
+  const diffDays = Math.floor((now.getTime() - d.getTime()) / 86_400_000)
+  if (diffDays === 0) return 'Today'
+  if (diffDays === 1) return 'Yesterday'
+  if (diffDays < 7) return `${diffDays}d ago`
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-function FileIcon({ type }: { type: string | null }) {
+function getFileConfig(type: string | null): {
+  icon: React.ReactNode
+  zoneBg: string
+  badge: string
+  badgeText: string
+} {
   if (type === 'application/pdf') {
-    return <FileText className="h-5 w-5 text-red-500 shrink-0" />
-  }
-  if (type?.startsWith('image/')) {
-    return <ImageIcon className="h-5 w-5 text-blue-500 shrink-0" />
-  }
-  return <File className="h-5 w-5 text-muted-foreground shrink-0" />
-}
-
-function TypeBadge({ type }: { type: string | null }) {
-  if (type === 'application/pdf') {
-    return (
-      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 uppercase">
-        PDF
-      </span>
-    )
+    return {
+      icon: <FileText className="h-8 w-8 text-red-500/70" />,
+      zoneBg: 'bg-red-500/[0.07]',
+      badge: 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20',
+      badgeText: 'PDF',
+    }
   }
   if (type?.startsWith('image/')) {
     const ext = type.split('/')[1]?.toUpperCase() ?? 'IMG'
-    return (
-      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 uppercase">
-        {ext}
-      </span>
-    )
+    return {
+      icon: <ImageIcon className="h-8 w-8 text-blue-500/70" />,
+      zoneBg: 'bg-blue-500/[0.07]',
+      badge: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20',
+      badgeText: ext,
+    }
   }
-  return (
-    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground uppercase">
-      FILE
-    </span>
-  )
+  return {
+    icon: <File className="h-8 w-8 text-muted-foreground/40" />,
+    zoneBg: 'bg-muted/20',
+    badge: 'bg-muted text-muted-foreground border border-border/50',
+    badgeText: 'FILE',
+  }
 }
 
 export function DocumentCard({ doc, projects, docTags }: DocumentCardProps) {
-  const [downloading, setDownloading]     = useState(false)
-  const [deleting, setDeleting]           = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState(false)
-  const [editOpen, setEditOpen]           = useState(false)
-  const [editName, setEditName]           = useState('')
-  const [editProjectId, setEditProjectId] = useState('')
-  const [editTagNames, setEditTagNames]   = useState<string[]>([])
-  const [saving, setSaving]               = useState(false)
-  const [error, setError]                 = useState<string | null>(null)
+  const [downloading,    setDownloading]    = useState(false)
+  const [deleting,       setDeleting]       = useState(false)
+  const [confirmDelete,  setConfirmDelete]  = useState(false)
+  const [editOpen,       setEditOpen]       = useState(false)
+  const [editName,       setEditName]       = useState('')
+  const [editProjectId,  setEditProjectId]  = useState('')
+  const [editTagNames,   setEditTagNames]   = useState<string[]>([])
+  const [saving,         setSaving]         = useState(false)
+  const [error,          setError]          = useState<string | null>(null)
 
   function openEdit() {
     setEditName(doc.name)
@@ -115,21 +124,16 @@ export function DocumentCard({ doc, projects, docTags }: DocumentCardProps) {
     if (!editName.trim()) return
     setSaving(true)
     setError(null)
-
     const result = await editDocument(doc.id, {
       name: editName.trim(),
       project_id: editProjectId || null,
     })
-
     if (result?.error) {
       setError(result.error)
       setSaving(false)
       return
     }
-
-    // Always sync tags (clears when empty)
     await setDocumentTags(doc.id, editTagNames)
-
     setSaving(false)
     setEditOpen(false)
   }
@@ -141,13 +145,11 @@ export function DocumentCard({ doc, projects, docTags }: DocumentCardProps) {
     const { data, error: urlError } = await supabase.storage
       .from('vault')
       .createSignedUrl(doc.file_path, 3600)
-
     if (urlError || !data?.signedUrl) {
       setError('Could not generate download link.')
       setDownloading(false)
       return
     }
-
     window.open(data.signedUrl, '_blank')
     setDownloading(false)
   }
@@ -163,90 +165,117 @@ export function DocumentCard({ doc, projects, docTags }: DocumentCardProps) {
     }
   }
 
+  const { icon, zoneBg, badge, badgeText } = getFileConfig(doc.file_type)
+
   return (
     <>
-      <div className="flex items-center gap-3 px-4 py-3 rounded-xl border bg-card hover:bg-accent/30 transition-colors">
-        <FileIcon type={doc.file_type} />
-
-        {/* Name + meta */}
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{doc.name}</p>
-          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            <TypeBadge type={doc.file_type} />
-            <span className="text-[11px] text-muted-foreground">{formatSize(doc.file_size)}</span>
-            {doc.project_name && (
-              <span className="text-[11px] bg-secondary text-secondary-foreground px-1.5 py-0.5 rounded">
-                {doc.project_name}
-              </span>
+      <div className="flex flex-col rounded-xl border bg-card overflow-hidden hover:border-border/80 hover:shadow-sm transition-all duration-150">
+        {/* File type header zone */}
+        <div className={cn('h-20 relative flex items-end px-3 pb-2.5', zoneBg)}>
+          {icon}
+          <span
+            className={cn(
+              'absolute top-2.5 right-2.5 text-[10px] font-semibold px-1.5 py-0.5 rounded',
+              badge
             )}
-            {docTags.map((tag) => (
-              <TagBadge key={tag.id} tag={tag} />
-            ))}
-            <span className="text-[11px] text-muted-foreground">{formatDate(doc.created_at)}</span>
-          </div>
+          >
+            {badgeText}
+          </span>
+        </div>
+
+        {/* Card body */}
+        <div className="px-3 pt-2.5 pb-2 flex-1">
+          <p className="text-sm font-semibold leading-snug truncate" title={doc.name}>
+            {doc.name}
+          </p>
+          <p className="text-[11px] text-muted-foreground/60 mt-0.5 tabular-nums">
+            {formatSize(doc.file_size)}
+          </p>
+
+          {/* Project + tags */}
+          {(doc.project_name || docTags.length > 0) && (
+            <div className="flex flex-wrap items-center gap-1 mt-2">
+              {doc.project_name && (
+                <span className="text-[11px] bg-muted text-muted-foreground border border-border/50 px-1.5 py-0.5 rounded truncate max-w-[120px]">
+                  {doc.project_name}
+                </span>
+              )}
+              {docTags.map((tag) => (
+                <TagBadge key={tag.id} tag={tag} />
+              ))}
+            </div>
+          )}
+
           {error && (
-            <p className="text-[11px] text-destructive mt-0.5">{error}</p>
+            <p className="text-[11px] text-destructive mt-1.5">{error}</p>
           )}
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
+        {/* Bottom action row */}
+        <div className="flex items-center gap-0.5 px-2 py-1.5 border-t border-border/30">
+          <span className="text-[11px] text-muted-foreground/40 flex-1 tabular-nums pl-0.5">
+            {formatRelativeDate(doc.created_at)}
+          </span>
+
+          {/* Download */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 text-muted-foreground/50 hover:text-primary hover:bg-accent"
             onClick={handleDownload}
             disabled={downloading}
             title="View / Download"
-            className="text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
           >
             {downloading
-              ? <Loader2 className="h-4 w-4 animate-spin" />
-              : <Download className="h-4 w-4" />}
-          </button>
+              ? <Loader2 className="h-3 w-3 animate-spin" />
+              : <Download className="h-3 w-3" />}
+          </Button>
 
-          <button
-            type="button"
+          {/* Edit */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 text-muted-foreground/50 hover:text-foreground hover:bg-accent"
             onClick={openEdit}
             title="Edit"
-            className="text-muted-foreground hover:text-foreground transition-colors"
           >
-            <Pencil className="h-4 w-4" />
-          </button>
+            <Pencil className="h-3 w-3" />
+          </Button>
 
+          {/* Delete */}
           {confirmDelete ? (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-0.5">
               <button
                 type="button"
                 onClick={handleDelete}
                 disabled={deleting}
-                className="text-[11px] text-destructive font-medium hover:underline disabled:opacity-50"
+                className="text-[11px] text-destructive font-medium hover:underline disabled:opacity-50 px-1"
               >
-                {deleting ? '…' : 'Delete'}
+                {deleting ? '…' : 'Del'}
               </button>
               <button
                 type="button"
                 onClick={() => setConfirmDelete(false)}
-                className="text-[11px] text-muted-foreground hover:underline"
+                className="text-[11px] text-muted-foreground hover:underline px-1"
               >
-                Cancel
+                No
               </button>
             </div>
           ) : (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10"
               onClick={() => setConfirmDelete(true)}
               title="Delete"
-              className={cn(
-                'text-muted-foreground hover:text-destructive transition-colors',
-                deleting && 'opacity-50 pointer-events-none'
-              )}
             >
-              <Trash2 className="h-4 w-4" />
-            </button>
+              <Trash2 className="h-3 w-3" />
+            </Button>
           )}
         </div>
       </div>
 
-      {/* Inline edit dialog */}
+      {/* Edit dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -259,7 +288,6 @@ export function DocumentCard({ doc, projects, docTags }: DocumentCardProps) {
                 {error}
               </div>
             )}
-
             <div className="space-y-2">
               <Label htmlFor="edit-doc-name">Title *</Label>
               <Input
@@ -269,7 +297,6 @@ export function DocumentCard({ doc, projects, docTags }: DocumentCardProps) {
                 placeholder="Document title…"
               />
             </div>
-
             {projects.length > 0 && (
               <div className="space-y-2">
                 <Label htmlFor="edit-doc-project">Link to project (optional)</Label>
@@ -281,14 +308,11 @@ export function DocumentCard({ doc, projects, docTags }: DocumentCardProps) {
                 >
                   <option value="">None</option>
                   {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
+                    <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                 </select>
               </div>
             )}
-
             <div className="space-y-2">
               <Label>Tags (optional)</Label>
               <TagInput

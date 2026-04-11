@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Play, Square, RotateCcw, CheckCircle2, Timer, Target } from 'lucide-react'
+import { Play, Square, RotateCcw, CheckCircle2, Timer, Target, CalendarRange } from 'lucide-react'
 import { saveSession } from '@/lib/actions/focus'
 import { cn } from '@/lib/utils'
 
@@ -19,19 +19,30 @@ interface SelectOption {
 interface FocusTimerProps {
   tasks: SelectOption[]
   projects: SelectOption[]
+  // Phase 11.F: optional prefill from Planner → Focus handoff via query params
+  initialIntent?: string
+  initialDuration?: number
 }
 
 const PRESET_MINUTES = [15, 25, 30, 45, 60]
 const CIRCLE_R = 120
 const CIRCUMFERENCE = 2 * Math.PI * CIRCLE_R
 
-export function FocusTimer({ tasks, projects }: FocusTimerProps) {
+export function FocusTimer({ tasks, projects, initialIntent, initialDuration }: FocusTimerProps) {
   const router = useRouter()
 
+  // Phase 11.F: if launched from planner, prefill goal and duration.
+  // If initialDuration matches a preset, select that preset; otherwise use custom.
+  const fromPlanner = !!initialIntent
+  const defaultPreset = initialDuration && PRESET_MINUTES.includes(initialDuration) ? initialDuration : 25
+  const defaultCustom = initialDuration && !PRESET_MINUTES.includes(initialDuration)
+    ? String(initialDuration)
+    : ''
+
   // Setup state
-  const [plannedMinutes, setPlannedMinutes] = useState(25)
-  const [customMinutes, setCustomMinutes] = useState('')
-  const [goal, setGoal] = useState('')
+  const [plannedMinutes, setPlannedMinutes] = useState(defaultPreset)
+  const [customMinutes, setCustomMinutes] = useState(defaultCustom)
+  const [goal, setGoal] = useState(initialIntent ?? '')
   const [taskId, setTaskId] = useState('')
   const [projectId, setProjectId] = useState('')
 
@@ -47,6 +58,7 @@ export function FocusTimer({ tasks, projects }: FocusTimerProps) {
   const [result, setResult] = useState<{
     completed: boolean
     actualMinutes: number
+    plannedMinutes: number
     goal: string | null
   } | null>(null)
   const [saving, setSaving] = useState(false)
@@ -85,13 +97,14 @@ export function FocusTimer({ tasks, projects }: FocusTimerProps) {
         ended_at: endedAt.toISOString(),
         task_id: taskId || null,
         project_id: projectId || null,
+        from_planner: fromPlanner,
       })
 
       if (res?.error) {
         setSaveError(res.error)
         savedRef.current = false // allow retry
       } else {
-        setResult({ completed, actualMinutes, goal: goal.trim() || null })
+        setResult({ completed, actualMinutes, plannedMinutes: effectiveMinutes, goal: goal.trim() || null })
         router.refresh()
       }
 
@@ -204,9 +217,18 @@ export function FocusTimer({ tasks, projects }: FocusTimerProps) {
 
           {/* Goal */}
           <div className="space-y-2">
-            <Label htmlFor="focus-goal" className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">
-              Session goal <span className="normal-case font-normal text-muted-foreground/40">(optional)</span>
-            </Label>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="focus-goal" className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">
+                Session goal <span className="normal-case font-normal text-muted-foreground/40">(optional)</span>
+              </Label>
+              {/* Phase 11.F: badge shown when session was launched from the Planner */}
+              {fromPlanner && (
+                <span className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                  <CalendarRange className="h-2 w-2" />
+                  From planner
+                </span>
+              )}
+            </div>
             <div className="relative">
               <Target className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40 pointer-events-none" />
               <Input
@@ -395,7 +417,9 @@ export function FocusTimer({ tasks, projects }: FocusTimerProps) {
                 {result.actualMinutes}m
               </p>
               <p className="text-sm text-muted-foreground">
-                {result.completed ? 'of focused work' : 'before stopping early'}
+                {result.completed
+                  ? 'of focused work'
+                  : `of ${result.plannedMinutes}m planned — stopped early`}
                 {result.goal && <> — &ldquo;{result.goal}&rdquo;</>}
               </p>
             </div>

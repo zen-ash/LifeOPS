@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import type { GeneratedPlan } from '@/types'
+import { logEvent } from '@/lib/actions/activityLog'
 
 export async function savePlan(weekStart: string, plan: GeneratedPlan) {
   const supabase = await createClient()
@@ -25,6 +26,12 @@ export async function savePlan(weekStart: string, plan: GeneratedPlan) {
     )
 
   if (error) return { error: error.message }
+
+  await logEvent(supabase, user.id, {
+    event_type: 'plan_saved',
+    entity_type: 'weekly_plan',
+    payload: { week_start_date: weekStart },
+  })
 
   revalidatePath('/planner')
   return { success: true }

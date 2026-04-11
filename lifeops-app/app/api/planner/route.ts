@@ -2,30 +2,44 @@ import { generateObject } from 'ai'
 import { openai } from '@ai-sdk/openai'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
+import { logEvent } from '@/lib/actions/activityLog'
+import type { GeneratedPlan, PlanDay } from '@/types'
 
 export const maxDuration = 30
 
-// Zod schema for the generated weekly plan — must match GeneratedPlan in types/index.ts
+// V2 structured day schema — Phase 11.D
+// tasks / habits / focus_blocks are separate arrays; rationale explains the scheduling decision.
+const daySchema = z.object({
+  day: z.string().describe('Day name, e.g. Monday'),
+  focus_blocks: z
+    .array(z.string())
+    .describe(
+      '1-2 specific focus work activities for this day. Use the actual task or course names — never just "study".'
+    ),
+  tasks: z
+    .array(z.string())
+    .describe(
+      '2-3 task titles taken directly from the task list. Assign earlier-deadline tasks to earlier days.'
+    ),
+  habits: z
+    .array(z.string())
+    .describe(
+      'Habit names the student should do today based on their frequency config. Daily habits appear every day; weekly habits only on their selected weekdays.'
+    ),
+  rationale: z
+    .string()
+    .describe(
+      '1-2 sentences explaining why these specific tasks are assigned today. Reference actual due dates, priority levels, or goal alignment. No generic motivational filler.'
+    ),
+})
+
 const planSchema = z.object({
   weekStart: z.string().describe('ISO date string for Monday of this week (YYYY-MM-DD)'),
-  days: z.array(
-    z.object({
-      day: z.string().describe('Day name, e.g. Monday'),
-      focusBlock: z
-        .string()
-        .describe('A specific 1–2 hour focus activity for this day'),
-      topTasks: z
-        .array(z.string())
-        .describe('2–3 concrete tasks from the task list that fit this day'),
-      habitReminder: z
-        .string()
-        .describe('Which habits to prioritize today based on their schedule'),
-      notes: z
-        .string()
-        .describe('One practical tip or motivational note for this day'),
-    })
-  ),
+  days: z.array(daySchema),
 })
+
+// Ordered day names for rebuild-rest-of-week range computation
+const DAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 // Returns the ISO date string for Monday of the week containing `date`
 function getMondayOfWeek(date: Date): string {
@@ -36,7 +50,19 @@ function getMondayOfWeek(date: Date): string {
   return d.toISOString().split('T')[0]
 }
 
-export async function POST() {
+// Serialize a day from an existing plan into a compact summary string for context passing
+function serializeDaySummary(d: PlanDay): string {
+  const tasks = d.tasks ?? d.topTasks ?? []
+  const habits = d.habits ?? (d.habitReminder ? [d.habitReminder] : [])
+  const focusBlocks = d.focus_blocks ?? (d.focusBlock ? [d.focusBlock] : [])
+  const parts: string[] = []
+  if (focusBlocks.length) parts.push(`Focus: ${focusBlocks.join('; ')}`)
+  if (tasks.length) parts.push(`Tasks: ${tasks.join(', ')}`)
+  if (habits.length) parts.push(`Habits: ${habits.join(', ')}`)
+  return parts.join(' | ')
+}
+
+export async function POST(req: Request) {
   if (!process.env.OPENAI_API_KEY) {
     return Response.json(
       { error: 'OPENAI_API_KEY is not configured on this server.' },
@@ -53,22 +79,33 @@ export async function POST() {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  // Parse optional body — default to full-week generation
+  const body = await req.json().catch(() => ({}))
+  const mode: 'full' | 'rebuild_day' | 'rebuild_rest_of_week' = body.mode ?? 'full'
+  const targetDay: string | undefined = body.targetDay
+  const currentPlan: GeneratedPlan | undefined = body.currentPlan
+
   const now = new Date()
   const today = now.toISOString().split('T')[0]
   const weekStart = getMondayOfWeek(now)
 
-  // Build week end date (Sunday)
   const weekEndDate = new Date(weekStart)
   weekEndDate.setDate(weekEndDate.getDate() + 6)
   const weekEnd = weekEndDate.toISOString().split('T')[0]
 
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
   const todayName = dayNames[now.getDay()]
+  const todayIndex = DAY_ORDER.indexOf(todayName) // -1 if somehow not found
 
-  // Week boundaries for focus stats
   const weekStartISO = new Date(weekStart + 'T00:00:00Z').toISOString()
 
-  // Fetch lightweight context in parallel — all scoped to the logged-in user
+  // Build remaining / past day lists for rebuild modes
+  const remainingDays =
+    todayIndex >= 0 ? DAY_ORDER.slice(todayIndex) : DAY_ORDER
+  const pastDays =
+    todayIndex > 0 ? DAY_ORDER.slice(0, todayIndex) : []
+
+  // Fetch user context in parallel — always needed
   const [profileResult, tasksResult, habitsResult, focusResult] = await Promise.all([
     supabase
       .from('profiles')
@@ -95,6 +132,24 @@ export async function POST() {
       .gte('started_at', weekStartISO),
   ])
 
+  // For rebuild modes: also fetch overdue / slipped tasks to surface in the repair prompt
+  let overdueTasksText = ''
+  if (mode !== 'full') {
+    const { data: overdueTasks } = await supabase
+      .from('tasks')
+      .select('title, priority, due_date')
+      .eq('user_id', user.id)
+      .in('status', ['todo', 'in_progress'])
+      .lt('due_date', today)
+      .order('due_date', { ascending: true })
+      .limit(8)
+
+    overdueTasksText =
+      overdueTasks && overdueTasks.length > 0
+        ? `## Overdue / Slipped Tasks (must be rescheduled this week)\n${overdueTasks.map((t) => `- [${t.priority}] ${t.title} (was due ${t.due_date})`).join('\n')}`
+        : '## Overdue Tasks\nNone.'
+  }
+
   const profile = profileResult.data
   const tasks = tasksResult.data ?? []
   const habits = habitsResult.data ?? []
@@ -105,7 +160,7 @@ export async function POST() {
     0
   )
 
-  // Serialize context into readable text
+  // Serialize task context
   const taskContext =
     tasks.length === 0
       ? 'No incomplete tasks.'
@@ -116,6 +171,7 @@ export async function POST() {
           })
           .join('\n')
 
+  // Serialize habit context including weekday schedules
   const habitContext =
     habits.length === 0
       ? 'No active habits.'
@@ -131,14 +187,53 @@ export async function POST() {
           })
           .join('\n')
 
-  const goalsText =
-    profile?.goals?.length ? profile.goals.join(', ') : 'Not specified'
-  const prioritiesText =
-    profile?.priorities?.length ? profile.priorities.join(', ') : 'Not specified'
+  const goalsText = profile?.goals?.length ? profile.goals.join(', ') : 'Not specified'
+  const prioritiesText = profile?.priorities?.length ? profile.priorities.join(', ') : 'Not specified'
   const studyHours =
     profile?.study_hours_per_week != null
       ? `${profile.study_hours_per_week} hours`
       : 'Not specified'
+
+  // Build mode-specific context block for the system prompt
+  let modeContext = ''
+  if (mode === 'rebuild_day' && targetDay) {
+    const otherDays = (currentPlan?.days ?? []).filter((d) => d.day !== targetDay)
+    const otherDaysText =
+      otherDays.length > 0
+        ? otherDays.map((d) => `- ${d.day}: ${serializeDaySummary(d)}`).join('\n')
+        : 'No other days in plan.'
+
+    modeContext = `
+## Rebuild Mode: Single Day
+You are repairing ONLY ${targetDay}. Generate exactly 1 day in your response: ${targetDay}.
+Do not generate any other days.
+
+## Other Days Already Planned (for context only — do not change):
+${otherDaysText}
+
+${overdueTasksText}
+
+Prioritize overdue tasks when assigning work to ${targetDay}.`
+  } else if (mode === 'rebuild_rest_of_week') {
+    const pastDayPlans = (currentPlan?.days ?? []).filter((d) => pastDays.includes(d.day))
+    const pastDaysText =
+      pastDayPlans.length > 0
+        ? pastDayPlans.map((d) => `- ${d.day}: ${serializeDaySummary(d)}`).join('\n')
+        : 'No past days recorded.'
+
+    modeContext = `
+## Rebuild Mode: Rest of Week
+You are repairing the plan from today (${todayName}) through Sunday.
+Generate ONLY these ${remainingDays.length} days: ${remainingDays.join(', ')}.
+Do not generate any other days.
+
+## Past Days Already Completed (for context only — do not generate):
+${pastDaysText}
+
+${overdueTasksText}
+
+Distribute overdue tasks across ${remainingDays.filter((d) => !['Saturday', 'Sunday'].includes(d)).join(', ')} — keep weekends lighter.`
+  }
 
   const systemPrompt = `You are a productivity planner for a university student named ${profile?.full_name ?? 'the student'}.
 
@@ -151,29 +246,42 @@ Priorities: ${prioritiesText}
 Available study hours per week: ${studyHours}
 Focus time logged so far this week: ${focusMinutesThisWeek} minutes
 
-## Incomplete Tasks (sorted by priority and due date)
+## Incomplete Tasks (sorted by due date — assign earlier-deadline tasks to earlier days)
 ${taskContext}
 
-## Active Habits
+## Active Habits (with their schedule)
 ${habitContext}
-
+${modeContext}
 ## Planning Rules
-- Assign tasks by their due dates — tasks due earlier in the week must appear in earlier days
-- Spread work evenly — no day should have more than 3 tasks
-- Weekend days (Saturday, Sunday) should be lighter: 1–2 tasks max, shorter focus blocks
-- Reference the student's actual task titles and habit names directly — do not invent new ones
-- focusBlock should name a specific topic or activity, not just "study"
-- topTasks should be 2–3 items picked from the task list above, matching due date proximity
-- habitReminder should name the specific habits scheduled for that day
-- notes should be one practical, encouraging tip (1–2 sentences max)
-- If tasks is empty, suggest general study or review blocks relevant to the student's goals`
+- tasks: Pick 2-3 task titles directly from the task list above. Match due date order — earlier deadlines go to earlier days. Use the exact task title.
+- focus_blocks: 1-2 specific work activities (name the actual subject or project, not just "study" or "work").
+- habits: List only habits actually scheduled today based on their frequency (daily = every day; weekly = only on their named weekdays).
+- rationale: 1-2 sentences explaining why these tasks are here today — reference due dates, priorities, or goals. No generic motivational advice.
+- Weekend days: tasks max 2, focus_blocks max 1, lighter load overall.
+- Do not invent tasks or habits that are not in the lists above.`
+
+  // Build the generation prompt based on mode
+  let generationPrompt: string
+  if (mode === 'rebuild_day' && targetDay) {
+    generationPrompt = `Repair the plan for ${targetDay} only. Return exactly 1 day object: ${targetDay}.`
+  } else if (mode === 'rebuild_rest_of_week') {
+    generationPrompt = `Repair the plan from ${todayName} through Sunday. Return exactly ${remainingDays.length} days: ${remainingDays.join(', ')}.`
+  } else {
+    generationPrompt = `Generate a complete 7-day weekly plan for all 7 days: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday. Week starts ${weekStart}.`
+  }
 
   try {
     const { object: plan } = await generateObject({
       model: openai('gpt-4o-mini'),
       schema: planSchema,
       system: systemPrompt,
-      prompt: `Generate a complete 7-day weekly plan for all 7 days: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday. Week starts ${weekStart}.`,
+      prompt: generationPrompt,
+    })
+
+    await logEvent(supabase, user.id, {
+      event_type: 'plan_generated',
+      entity_type: 'weekly_plan',
+      payload: { week_start: weekStart, mode },
     })
 
     return Response.json({ plan })

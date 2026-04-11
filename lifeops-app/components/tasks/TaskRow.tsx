@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Pencil, Trash2 } from 'lucide-react'
-import { deleteTask, toggleTaskStatus } from '@/lib/actions/tasks'
+import { Pencil, Trash2, ArrowRight, Zap } from 'lucide-react'
+import { deleteTask, toggleTaskStatus, carryToTomorrow } from '@/lib/actions/tasks'
 import { EditTaskDialog } from './EditTaskDialog'
 import { TagBadge } from '@/components/ui/tag-input'
 import { cn } from '@/lib/utils'
@@ -24,11 +24,39 @@ interface TaskRowProps {
   taskTags: Tag[]
 }
 
-const PRIORITY_STYLES: Record<string, string> = {
-  urgent: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-  high: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-  medium: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-  low: 'bg-secondary text-secondary-foreground',
+const PRIORITY_BAR: Record<string, string> = {
+  urgent: 'bg-red-500',
+  high:   'bg-orange-500',
+  medium: 'bg-yellow-400',
+  low:    'bg-blue-400/60',
+}
+
+// ── Urgency model — Phase 11.E ─────────────────────────────────────────────
+// Computed purely from existing task fields; no DB or trigger required.
+type UrgencyLevel = 'overdue' | 'due_today' | 'due_soon' | 'at_risk' | 'normal'
+
+function getUrgencyLevel(task: TaskWithProject): UrgencyLevel {
+  if (task.status === 'done' || task.status === 'cancelled') return 'normal'
+
+  if (!task.due_date) {
+    // Undated urgent tasks are operationally at-risk — no deadline, but maximal priority
+    return task.priority === 'urgent' ? 'at_risk' : 'normal'
+  }
+
+  // Parse as local date — due dates are day-level, not timestamps
+  const [y, m, d] = task.due_date.split('-').map(Number)
+  const due = new Date(y, m - 1, d)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const tomorrow = new Date(today)
+  tomorrow.setDate(today.getDate() + 1)
+  const dayAfterTomorrow = new Date(today)
+  dayAfterTomorrow.setDate(today.getDate() + 2)
+
+  if (due < today)             return 'overdue'
+  if (due < tomorrow)          return 'due_today'
+  if (due < dayAfterTomorrow)  return 'due_soon'
+  return 'normal'
 }
 
 function formatDueDate(dateStr: string): string {
@@ -36,30 +64,22 @@ function formatDueDate(dateStr: string): string {
   const due = new Date(year, month - 1, day)
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-
   const diffDays = Math.round((due.getTime() - today.getTime()) / 86_400_000)
-
-  if (diffDays === 0) return 'Today'
-  if (diffDays === 1) return 'Tomorrow'
+  if (diffDays === 0)  return 'Today'
+  if (diffDays === 1)  return 'Tomorrow'
   if (diffDays === -1) return 'Yesterday'
+  if (diffDays < 0)    return `${Math.abs(diffDays)}d overdue`
   return due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-function isOverdue(dateStr: string, status: string): boolean {
-  if (status === 'done' || status === 'cancelled') return false
-  const [year, month, day] = dateStr.split('-').map(Number)
-  const due = new Date(year, month - 1, day)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return due < today
 }
 
 export function TaskRow({ task, projects, taskTags }: TaskRowProps) {
   const [pending, setPending] = useState(false)
+  const [carrying, setCarrying] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
 
   const isDone = task.status === 'done'
-  const overdue = task.due_date ? isOverdue(task.due_date, task.status) : false
+  const urgency = getUrgencyLevel(task)
+  const showCarry = urgency === 'overdue' || urgency === 'due_today'
 
   async function handleToggle() {
     setPending(true)
@@ -72,9 +92,46 @@ export function TaskRow({ task, projects, taskTags }: TaskRowProps) {
     await deleteTask(task.id)
   }
 
+  async function handleCarry() {
+    setCarrying(true)
+    await carryToTomorrow(task.id)
+    setCarrying(false)
+  }
+
+  // Due date chip styling — stronger for overdue/today
+  const dueDateChipClass =
+    urgency === 'overdue'
+      ? 'bg-destructive/10 text-destructive border border-destructive/20 font-semibold'
+      : urgency === 'due_today'
+      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-medium'
+      : urgency === 'due_soon'
+      ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20'
+      : 'bg-muted text-muted-foreground border border-border/40'
+
+  // Row background tint for overdue tasks — subtle signal without redesign
+  const rowBgClass =
+    urgency === 'overdue' && !isDone
+      ? 'bg-destructive/[0.02] hover:bg-destructive/[0.05]'
+      : 'hover:bg-accent/30'
+
   return (
     <>
-      <div className="group flex items-start gap-3 py-3 px-1 border-b last:border-b-0 hover:bg-accent/30 rounded-sm transition-colors">
+      <div
+        className={cn(
+          'group flex items-center gap-3 pl-3 pr-2 py-3 border-b last:border-b-0',
+          'transition-colors',
+          rowBgClass,
+          isDone && 'opacity-50'
+        )}
+      >
+        {/* Priority bar */}
+        <div
+          className={cn(
+            'w-0.5 self-stretch rounded-full shrink-0',
+            isDone ? 'bg-muted-foreground/20' : PRIORITY_BAR[task.priority]
+          )}
+        />
+
         {/* Checkbox */}
         <button
           type="button"
@@ -82,34 +139,50 @@ export function TaskRow({ task, projects, taskTags }: TaskRowProps) {
           disabled={pending}
           aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
           className={cn(
-            'mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition-colors',
+            'h-5 w-5 shrink-0 rounded-[5px] border-2 flex items-center justify-center',
+            'transition-all duration-200 cursor-pointer',
             isDone
               ? 'bg-primary border-primary'
-              : 'border-muted-foreground/40 hover:border-primary'
+              : 'border-muted-foreground/30 hover:border-primary/70 hover:bg-primary/5'
           )}
         >
           {isDone && (
-            <svg className="h-2.5 w-2.5 text-primary-foreground" viewBox="0 0 10 10" fill="none">
-              <path d="M1.5 5L4 7.5L8.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <svg className="h-3 w-3 text-primary-foreground" viewBox="0 0 10 10" fill="none">
+              <path
+                d="M1.5 5L4 7.5L8.5 2.5"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
           )}
         </button>
 
-        {/* Title + description + tags */}
+        {/* Title + description + tags + at-risk badge */}
         <div className="flex-1 min-w-0">
-          <p
-            className={cn(
-              'text-sm font-medium leading-snug truncate',
-              isDone && 'line-through text-muted-foreground'
+          <div className="flex items-center gap-1.5 min-w-0">
+            <p
+              className={cn(
+                'text-sm font-medium leading-snug truncate',
+                isDone && 'line-through text-muted-foreground/60'
+              )}
+            >
+              {task.title}
+            </p>
+            {/* At-risk badge: urgent priority with no due date */}
+            {urgency === 'at_risk' && (
+              <span className="inline-flex items-center gap-0.5 shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">
+                <Zap className="h-2.5 w-2.5" />
+                At risk
+              </span>
             )}
-          >
-            {task.title}
-          </p>
+          </div>
           {task.description && (
-            <p className="text-xs text-muted-foreground truncate">{task.description}</p>
+            <p className="text-xs text-muted-foreground/70 truncate mt-0.5">{task.description}</p>
           )}
           {taskTags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-1">
+            <div className="flex flex-wrap gap-1 mt-1.5">
               {taskTags.map((tag) => (
                 <TagBadge key={tag.id} tag={tag} />
               ))}
@@ -117,32 +190,16 @@ export function TaskRow({ task, projects, taskTags }: TaskRowProps) {
           )}
         </div>
 
-        {/* Meta: priority, due date, project */}
-        <div className="flex items-center gap-2 shrink-0 mt-0.5">
-          <span
-            className={cn(
-              'text-[11px] font-medium px-1.5 py-0.5 rounded capitalize',
-              PRIORITY_STYLES[task.priority]
-            )}
-          >
-            {task.priority}
-          </span>
-
-          {task.due_date && (
-            <span
-              className={cn(
-                'text-xs',
-                overdue ? 'text-destructive font-medium' : 'text-muted-foreground'
-              )}
-            >
+        {/* Meta: due date chip + project */}
+        <div className="flex items-center gap-2 shrink-0">
+          {task.due_date && !isDone && (
+            <span className={cn('text-[11px] px-1.5 py-0.5 rounded', dueDateChipClass)}>
               {formatDueDate(task.due_date)}
             </span>
           )}
 
           {task.projects && (
-            <span
-              className="hidden sm:inline-flex items-center gap-1 text-[11px] text-muted-foreground border rounded px-1.5 py-0.5 max-w-[100px] truncate"
-            >
+            <span className="flex items-center gap-1 text-[11px] text-muted-foreground bg-muted border border-border/50 rounded px-1.5 py-0.5 max-w-[90px] truncate">
               <span
                 className="w-1.5 h-1.5 rounded-full shrink-0"
                 style={{ backgroundColor: task.projects.color }}
@@ -153,7 +210,22 @@ export function TaskRow({ task, projects, taskTags }: TaskRowProps) {
         </div>
 
         {/* Action buttons — visible on hover */}
-        <div className="flex gap-1 shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+          {/* Carry to tomorrow — only for overdue and due-today tasks */}
+          {showCarry && !isDone && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-amber-600 hover:bg-amber-500/10"
+              onClick={handleCarry}
+              disabled={carrying}
+              aria-label="Carry to tomorrow"
+              title="Carry to tomorrow"
+            >
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          )}
+
           <Button
             variant="ghost"
             size="icon"

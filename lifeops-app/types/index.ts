@@ -199,13 +199,117 @@ export interface StudyBuddy {
   updated_at: string
 }
 
-// Phase 7B: AI Planner
+// Phase 11.B: Daily Shutdown
+export type ShutdownDecisionAction = 'carry' | 'reschedule' | 'drop' | 'leave'
+
+export interface ShutdownDecision {
+  task_id: string
+  title: string
+  action: ShutdownDecisionAction
+  new_date?: string
+}
+
+export interface ShutdownTomorrowItem {
+  task_id: string
+  title: string
+  priority: string
+}
+
+export type ShutdownEnergyLevel = 'high' | 'medium' | 'low'
+
+export interface DailyShutdown {
+  id: string
+  user_id: string
+  shutdown_date: string
+  completed_tasks: Array<{ id: string; title: string; priority: string }>
+  slipped_decisions: ShutdownDecision[]
+  tomorrow_top3: ShutdownTomorrowItem[]
+  reflection: string | null
+  energy: ShutdownEnergyLevel | null
+  focus_minutes: number
+  created_at: string
+  updated_at: string
+}
+
+// Phase 11.A: Activity Log
+export type ActivityEventType =
+  | 'task_completed'
+  | 'task_uncompleted'
+  | 'focus_session_completed'
+  | 'focus_session_stopped_early'
+  | 'habit_checked'
+  | 'habit_skipped'
+  | 'plan_generated'
+  | 'plan_saved'
+  | 'shutdown_completed'
+  | 'weekly_review_completed'
+
+export interface ActivityLog {
+  id: string
+  user_id: string
+  event_type: ActivityEventType
+  entity_type: string | null
+  entity_id: string | null
+  occurred_at: string
+  payload: Record<string, unknown> | null
+}
+
+// Phase 11.C: Weekly Review
+export interface HabitConsistencyItem {
+  habitId: string
+  habitTitle: string
+  logsCount: number
+  expectedDays: number
+  percentage: number
+}
+
+export interface WeeklyMetrics {
+  focusMinutes: number
+  completedTaskCount: number
+  missedTaskCount: number
+  plannedTaskTitles: string[]
+  completedTasks: Array<{ id: string; title: string; priority: string }>
+  missedTasks: Array<{ id: string; title: string; priority: string; due_date: string | null }>
+  habitConsistency: HabitConsistencyItem[]
+  shutdownDays: number
+  energySummary: Array<{ date: string; energy: string | null }>
+}
+
+export interface ReviewAISummary {
+  summary: string
+  topWin: string
+  topLearning: string
+  nextWeekFocus: string
+}
+
+export interface WeeklyReview {
+  id: string
+  user_id: string
+  week_start: string
+  week_end: string
+  metrics_json: WeeklyMetrics
+  ai_summary: ReviewAISummary | null
+  reflection: string | null
+  created_at: string
+  updated_at: string
+}
+
+// Phase 7B / Phase 11.D: AI Planner
+// PlanDay supports both the legacy v1 shape (pre-11.D) and the new v2 structured shape.
+// All fields are optional so that old saved plans (which have v1 fields) continue to render,
+// while new plans (generated post-11.D) use v2 fields. DayCard handles both via fallback reads.
 export interface PlanDay {
   day: string
-  focusBlock: string
-  topTasks: string[]
-  habitReminder: string
-  notes: string
+  // V2 fields — Phase 11.D structured output
+  tasks?: string[]
+  habits?: string[]
+  focus_blocks?: string[]
+  rationale?: string
+  // V1 legacy fields — present in plans saved before Phase 11.D
+  focusBlock?: string
+  topTasks?: string[]
+  habitReminder?: string
+  notes?: string
 }
 
 export interface GeneratedPlan {

@@ -42,7 +42,7 @@ export function TagInput({ value, onChange, placeholder = 'Add tag…' }: TagInp
   }
 
   return (
-    <div className="flex flex-wrap gap-1.5 px-2.5 py-2 rounded-md border border-input bg-background min-h-10 cursor-text focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+    <div className="flex flex-wrap gap-1.5 px-2.5 py-2 rounded-md border border-input bg-background min-h-10 cursor-text focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
       {value.map((tag) => (
         <span
           key={tag}

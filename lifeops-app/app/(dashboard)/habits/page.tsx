@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { AddHabitDialog } from '@/components/habits/AddHabitDialog'
 import { HabitsView } from '@/components/habits/HabitsView'
+import { Flame } from 'lucide-react'
 
 export default async function HabitsPage() {
   const supabase = await createClient()
@@ -56,14 +57,25 @@ export default async function HabitsPage() {
     freezeLogsMap[fl.habit_id].push(fl.freeze_date)
   }
 
+  const activeCount = (habits ?? []).filter(h => h.is_active).length
+  const totalCount = habits?.length ?? 0
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Habits</h1>
-          <p className="text-muted-foreground mt-1">
-            Track your daily and weekly habits.
-          </p>
+    <div className="max-w-5xl mx-auto space-y-5">
+      {/* Page header */}
+      <div className="rounded-xl border bg-card px-6 py-4 flex items-center justify-between gap-4 animate-fade-in-up">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 shrink-0">
+            <Flame className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-base font-bold tracking-tight leading-tight">Habits</h1>
+            <p className="text-xs text-muted-foreground leading-tight mt-0.5">
+              {totalCount === 0
+                ? 'Build your daily routines'
+                : `${activeCount} active habit${activeCount === 1 ? '' : 's'} tracked`}
+            </p>
+          </div>
         </div>
         <AddHabitDialog projects={projects ?? []} />
       </div>

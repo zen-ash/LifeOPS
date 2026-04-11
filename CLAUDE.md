@@ -1,8 +1,16 @@
 # LifeOPS —  Claude Code Project Rules
 
 ## Project Overview
-LifeOPS is an undergraduate student productivity web app deployed on Vercel.
-All 9 phases are complete. The project is functionally finished.
+LifeOPS is an AI operating system for students and early-career builders, deployed on Vercel.
+The core promise: turn goals into a realistic week, execute it, and recover when life shifts.
+
+**Core loop:** Goals → AI weekly plan → daily execution → focus sessions → tasks/habits/notes/docs stay connected → daily shutdown → weekly review → replanning.
+
+The app must feel like one connected loop, not a collection of unrelated pages. Every new feature should strengthen that loop. Features that do not strengthen the loop are noise.
+
+All phases through 10D.1 are complete. The app is functionally finished and UI/UX launch-ready.
+It is treated as a serious personal product / flagship portfolio project.
+Further work focuses on product behavior, retention loops, intelligence, and premium additions — NOT large visual redesigns.
 
 ## Exact Stack
 - Next.js 15, App Router (no Pages Router)
@@ -57,12 +65,37 @@ Soft Eng Proj/
 - Do not add error handling for scenarios that can't happen
 - Do not add features, refactor, or clean up code beyond what the phase asks
 
+## Design System Rules (post Phase 10)
+- The design system is **locked** — do not casually tweak globals.css, token values, or base UI primitives
+- Do not propose another large visual redesign — the app is UI/UX launch-ready
+- New pages/components must follow the established token system (surface hierarchy, borders, rounded-xl, elevated card treatment)
+- AppShell (`components/layout/AppShell.tsx`) is the canonical shell — all protected pages render inside it
+- Sidebar and Header are finalized — do not restructure them unless a phase explicitly requires it
+- Notes page uses a split-pane master-detail layout (`NoteEditor` extracted) — preserve this pattern for similar features
+
 ## Session Continuity Rules
 - **Always read `PROJECT_STATE.md` at the start of a new session** before implementing anything
 - **Do not rebuild Phases 1–3A** — they are working; start from the current state
 - **Preserve working auth, onboarding flow, project CRUD, task management, and focus mode** — these must not break
 - **Sidebar links to unbuilt pages will 404** — this is expected and intentional until that phase is built
 - When a phase is complete, update `PROJECT_STATE.md` accordingly
+
+## Delivery Principles (Phase 11+)
+- Work **phase by phase** — do not build multiple phases at once
+- Do not casually rewrite backend logic or architecture
+- Preserve existing backend logic unless explicitly part of the current phase
+- Use **feature branches** for all significant work
+- For unfinished or staged features, prefer shipping behind a **feature flag** over exposing a broken partial version
+- Feature flags: use frontend/config/env flags first; only use DB-level flags if per-user rollout is needed
+- Prefer scoped prompts and scoped implementations — no 10-feature PRs
+
+## What NOT to Build
+- Do not start another large visual redesign
+- Do not add disconnected modules that don't strengthen the core loop
+- Do not overbuild collaboration/social features right now
+- Do not build Chat with Vault before notes/docs data structure is ready
+- Do not build calendar sync before planner logic is stable
+- Do not attempt full offline-first sync early
 
 ## Phase Roadmap
 - ✅ Phase 1 — Auth + dashboard + base project CRUD
@@ -83,3 +116,26 @@ Soft Eng Proj/
 - ✅ Phase 7B — AI Planner (Weekly plan at /planner; generateObject with Zod schema; save/upsert to weekly_plans; regenerate flow)
 - ✅ Phase 8 — Distraction Blocker Extension (MV3 Chrome extension in /extension; manual toggle; declarativeNetRequest; chrome.storage.local)
 - ✅ Phase 9 — Final polish + deployment readiness (mobile responsive grids; loading.tsx skeletons; capstone README.md)
+- ✅ Phase 10A — Design system + shell overhaul (premium dark-mode token system; AppShell; Sidebar + Header redesign; surface hierarchy)
+- ✅ Phase 10B — Dashboard overhaul (command-center layout; Today hero; focus/tasks/habits/projects/social zones; updated skeleton)
+- ✅ Phase 10C — Full page overhauls: Planner, Focus Mode, Tasks, Habits, Notes (→ split-pane master-detail), Documents, Leaderboard, Study Buddy, Onboarding
+- ✅ Phase 10D — Global design-system polish (antialiasing; branded selection; scrollbars; button micro-interactions; input/card/dialog/dropdown unification)
+- ✅ Phase 10D.1 — Micro polish follow-up (TagInput dark-mode fix; AppShell mobile padding)
+- ✅ Phase 11.A — Activity Log Foundation (`user_activity_logs` table — prerequisite for all Phase 11+)
+- ✅ Phase 11.B — Daily Shutdown (`/shutdown` workflow: done/slipped/carry-forward/tomorrow top 3/reflection)
+- ✅ Phase 11.C — Weekly Review (`/review`: planned vs actual, focus time, habit consistency, AI summary, reflection; weekly_reviews table)
+- ✅ Phase 11.D — AI Planner Upgrade (structured v2 PlanDay schema; Rebuild My Day + Rebuild Rest of Week flows; per-item remove; rationale field; backward-compatible with v1 saved plans)
+- ✅ Phase 11.E — Task Intelligence (urgency model overdue/due_today/due_soon/at_risk; at-risk badge for urgent+undated; Carry to Tomorrow action; overdue→shutdown/review CTA banner)
+- ✅ Phase 11.F — Focus Mode Upgrade (Planner→Focus URL handoff via ?intent&duration; prefill + "From planner" badge; planned vs actual in finished state; enriched activity log payload with goal+from_planner; Start Timer hover button on planner focus blocks)
+- 🔜 Phase 12.A — Command Palette (Cmd+K: navigation, create task, start focus, shutdown, review)
+- 🔜 Phase 12.B — Templates (exam prep, internship sprint, deep work week, etc.)
+- 🔜 Phase 12.C — Feedback Widget (floating bug/idea entry; stored in Supabase)
+- 🔜 Phase 12.D — Activity Heatmap (GitHub-style; focus/tasks/habits; profile or review surface)
+- 🔜 Phase 12.E — Habits Intelligence (misses feed into review/replanning; trend display)
+- 🔜 Phase 13.A — Workload Realism + Auto-Replanning (overload detection, repair this day/week)
+- 🔜 Phase 13.B — Notes / Docs / Vault Linking (link to tasks/projects/plans; relevance surfaces)
+- 🔜 Phase 13.C — Chat with Your Vault (chunk-based RAG over notes/docs; Supabase vector)
+- 🔜 Phase 14.A — Calendar Integration Foundation (read-only import; display real events in planner)
+- 🔜 Phase 14.B — Two-Way Calendar Sync (Google/Outlook push/pull; availability-aware planning)
+- 🔜 Phase 15.A — PWA (manifest, installable shell)
+- 🔜 Phase 15.B — Staged Offline Support (caching first; queued writes only if truly needed)

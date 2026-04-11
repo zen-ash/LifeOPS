@@ -3,11 +3,24 @@ import { FocusTimer } from '@/components/focus/FocusTimer'
 import { SessionHistory } from '@/components/focus/SessionHistory'
 import { Timer } from 'lucide-react'
 
-export default async function FocusPage() {
+// Phase 11.F: searchParams supports Planner → Focus handoff via URL query params.
+// ?intent=<focus block text>&duration=<minutes>
+export default async function FocusPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ intent?: string; duration?: string }>
+}) {
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
+
+  const { intent, duration } = await searchParams
+  const initialIntent = intent ? decodeURIComponent(intent) : undefined
+  const parsedDuration = duration ? parseInt(duration, 10) : NaN
+  const initialDuration = !isNaN(parsedDuration) && parsedDuration > 0 && parsedDuration <= 180
+    ? parsedDuration
+    : undefined
 
   const [{ data: sessions }, { data: tasks }, { data: projects }] =
     await Promise.all([
@@ -52,6 +65,8 @@ export default async function FocusPage() {
           <FocusTimer
             tasks={(tasks ?? []).map((t) => ({ id: t.id, name: t.title }))}
             projects={projects ?? []}
+            initialIntent={initialIntent}
+            initialDuration={initialDuration}
           />
         </div>
 

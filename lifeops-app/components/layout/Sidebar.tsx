@@ -16,6 +16,8 @@ import {
   Trophy,
   Bot,
   BrainCircuit,
+  Moon,
+  TrendingUp,
   Zap,
   X,
 } from 'lucide-react'
@@ -35,6 +37,8 @@ const toolsNav = [
   { label: 'Focus Mode', href: '/focus', icon: Timer },
   { label: 'Habits', href: '/habits', icon: Activity },
   { label: 'Calendar', href: '/calendar', icon: Calendar },
+  { label: 'Daily Shutdown', href: '/shutdown', icon: Moon },
+  { label: 'Weekly Review', href: '/review', icon: TrendingUp },
   { label: 'Study Buddy', href: '/study-buddy', icon: Users },
   { label: 'Leaderboard', href: '/leaderboard', icon: Trophy },
   { label: 'AI Assistant', href: '/assistant', icon: Bot },

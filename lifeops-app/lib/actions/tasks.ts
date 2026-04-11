@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { logEvent } from '@/lib/actions/activityLog'
 
 const VALID_STATUSES = ['todo', 'in_progress', 'done', 'cancelled']
 const VALID_PRIORITIES = ['low', 'medium', 'high', 'urgent']
@@ -138,6 +139,34 @@ export async function rescheduleTask(taskId: string, newDate: string) {
   return { success: true }
 }
 
+// Phase 11.E: Carry a task to tomorrow — mirrors Daily Shutdown "carry" behavior exactly.
+// Tomorrow is computed in UTC (same as completeShutdown's getTomorrow) so the date string
+// written to the DB is consistent regardless of which server action writes it.
+export async function carryToTomorrow(taskId: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const todayUTC = new Date().toISOString().split('T')[0]
+  const d = new Date(todayUTC + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + 1)
+  const tomorrow = d.toISOString().split('T')[0]
+
+  const { error } = await supabase
+    .from('tasks')
+    .update({ due_date: tomorrow })
+    .eq('id', taskId)
+    .eq('user_id', user.id)
+
+  if (error) return { error: error.message }
+
+  revalidateTaskPaths()
+  revalidatePath('/shutdown')
+  return { success: true }
+}
+
 export async function toggleTaskStatus(taskId: string, currentStatus: string) {
   const supabase = await createClient()
   const {
@@ -158,6 +187,12 @@ export async function toggleTaskStatus(taskId: string, currentStatus: string) {
     .eq('user_id', user.id)
 
   if (error) return { error: error.message }
+
+  await logEvent(supabase, user.id, {
+    event_type: isDone ? 'task_uncompleted' : 'task_completed',
+    entity_type: 'task',
+    entity_id: taskId,
+  })
 
   revalidateTaskPaths()
   return { success: true }
