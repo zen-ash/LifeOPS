@@ -21,6 +21,9 @@ interface DocRow {
 
 interface Project { id: string; name: string }
 
+// Phase 13.B
+interface TaskOption { id: string; title: string }
+
 type FileTypeFilter = 'all' | 'pdf' | 'image'
 
 interface DocumentsViewProps {
@@ -28,6 +31,9 @@ interface DocumentsViewProps {
   projects: Project[]
   tagsByDocId: Record<string, Tag[]>
   savedViews: SavedView[]
+  // Phase 13.B: task linking
+  tasks: TaskOption[]
+  linkedTaskIdsByDocId: Record<string, string[]>
 }
 
 const FILE_TYPE_TABS: { key: FileTypeFilter; label: string }[] = [
@@ -42,7 +48,7 @@ function countForType(documents: DocRow[], key: FileTypeFilter): number {
   return documents.filter(d => d.file_type?.startsWith('image/')).length
 }
 
-export function DocumentsView({ documents, projects, tagsByDocId, savedViews }: DocumentsViewProps) {
+export function DocumentsView({ documents, projects, tagsByDocId, savedViews, tasks, linkedTaskIdsByDocId }: DocumentsViewProps) {
   const [search,         setSearch]         = useState('')
   const [tagFilter,      setTagFilter]      = useState<string | null>(null)
   const [fileTypeFilter, setFileTypeFilter] = useState<FileTypeFilter>('all')
@@ -188,6 +194,8 @@ export function DocumentsView({ documents, projects, tagsByDocId, savedViews }: 
               doc={doc}
               projects={projects}
               docTags={tagsByDocId[doc.id] ?? []}
+              tasks={tasks}
+              linkedTaskIds={linkedTaskIdsByDocId[doc.id] ?? []}
             />
           ))}
         </div>

@@ -78,6 +78,8 @@ export default async function JournalPage() {
         projects={[]}
         tagsByNoteId={tagsByNoteId}
         savedViews={(rawSavedViews as SavedView[] | null) ?? []}
+        tasks={[]}
+        linkedTaskIdsByNoteId={{}}
       />
     </div>
   )

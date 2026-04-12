@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, usePathname } from 'next/navigation'
-import { Menu, LogOut, Settings, User } from 'lucide-react'
+import { Menu, LogOut, Settings, User, Search } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { Button } from '@/components/ui/button'
@@ -38,9 +38,10 @@ interface HeaderProps {
     email: string | null
   } | null
   onMenuClick: () => void
+  onOpenPalette?: () => void
 }
 
-export function Header({ profile, onMenuClick }: HeaderProps) {
+export function Header({ profile, onMenuClick, onOpenPalette }: HeaderProps) {
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
@@ -75,8 +76,21 @@ export function Header({ profile, onMenuClick }: HeaderProps) {
         <h1 className="text-sm font-semibold tracking-tight">{pageTitle}</h1>
       </div>
 
-      {/* Right: theme toggle + user menu */}
+      {/* Right: ⌘K hint + theme toggle + user menu */}
       <div className="flex items-center gap-1">
+        {/* Phase 12.A: command palette trigger — hidden on mobile (no keyboard shortcut on touch) */}
+        <button
+          onClick={onOpenPalette}
+          className="hidden md:flex items-center gap-2 h-8 px-3 rounded-md border border-border/50 bg-muted/40 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors text-xs mr-1"
+          aria-label="Open command palette"
+        >
+          <Search className="h-3 w-3 shrink-0" />
+          <span>Search…</span>
+          <kbd className="pointer-events-none inline-flex h-4 select-none items-center gap-0.5 rounded border border-border/50 bg-background px-1 font-mono text-[9px] font-medium text-muted-foreground/70 opacity-90">
+            <span className="text-[10px]">⌘</span>K
+          </kbd>
+        </button>
+
         <ThemeToggle />
 
         <DropdownMenu>

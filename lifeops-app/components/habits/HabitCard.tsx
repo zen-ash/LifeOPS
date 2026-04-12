@@ -11,12 +11,17 @@ import {
   Snowflake,
   Clock,
   Lightbulb,
+  MinusCircle,
+  TrendingUp,
+  TrendingDown,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
   logHabit,
   unlogHabit,
+  skipHabit,
+  unskipHabit,
   deleteHabit,
   convertHabitToTask,
   applyFreeze,
@@ -101,6 +106,7 @@ interface HabitCardProps {
   habit: HabitRow
   logs: string[]
   freezeDates: string[]
+  skipDates: string[]      // Phase 12.E
   isCompletedToday: boolean
   today: string
   yesterday: string
@@ -114,6 +120,7 @@ export function HabitCard({
   habit,
   logs,
   freezeDates,
+  skipDates,
   isCompletedToday,
   today,
   yesterday,
@@ -121,6 +128,7 @@ export function HabitCard({
   projects,
 }: HabitCardProps) {
   const [toggling, setToggling] = useState(false)
+  const [skipping, setSkipping] = useState(false)
   const [converting, setConverting] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [freezing, setFreezing] = useState(false)
@@ -144,6 +152,19 @@ export function HabitCard({
   const recentLogCount = logs.filter((d) => d >= shiftDate(today, -7)).length
   const showRecoverySuggestion = streak === 0 && recentLogCount === 0
 
+  // Phase 12.E: today's skip state
+  const isSkippedToday = skipDates.includes(today)
+
+  // Phase 12.E: 14-day consistency + trend
+  // Uses existing logs prop (60-day window) — no new query needed
+  const day7Start  = shiftDate(today, -6)   // last 7 days: [-6, today]
+  const day14Start = shiftDate(today, -13)  // prev 7 days: [-13, -7]
+  const day7End    = shiftDate(today, -7)   // boundary (exclusive for prev window)
+  const last7Count = logs.filter((d) => d >= day7Start && d <= today).length
+  const prev7Count = logs.filter((d) => d >= day14Start && d < day7End).length
+  const trend: 'up' | 'down' | 'flat' =
+    last7Count > prev7Count ? 'up' : last7Count < prev7Count ? 'down' : 'flat'
+
   // Last 7 days for history strip
   const last7 = Array.from({ length: 7 }, (_, i) => shiftDate(today, -(6 - i)))
 
@@ -164,6 +185,13 @@ export function HabitCard({
     if (isCompletedToday) await unlogHabit(habit.id, today)
     else await logHabit(habit.id, today)
     setToggling(false)
+  }
+
+  async function handleSkip() {
+    setSkipping(true)
+    if (isSkippedToday) await unskipHabit(habit.id, today)
+    else await skipHabit(habit.id, today)
+    setSkipping(false)
   }
 
   async function handleConvert() {
@@ -235,6 +263,7 @@ export function HabitCard({
             {last7.map((dateStr) => {
               const logged = logs.includes(dateStr)
               const frozen = freezeDates.includes(dateStr)
+              const skipped = skipDates.includes(dateStr)
               const isFuture = dateStr > today
               const isCurrentDay = dateStr === today
               return (
@@ -251,6 +280,8 @@ export function HabitCard({
                         ? 'bg-primary'
                         : frozen
                         ? 'bg-sky-400/50'
+                        : skipped
+                        ? 'bg-amber-400/60'
                         : isCurrentDay
                         ? 'bg-muted border border-border'
                         : 'bg-muted/60'
@@ -264,8 +295,8 @@ export function HabitCard({
 
         {/* Bottom: streak + check-in + actions */}
         <div className="px-4 pt-3 pb-4 flex flex-col gap-3 flex-1">
-          {/* Streak + freeze indicator */}
-          <div className="flex items-center gap-3">
+          {/* Streak + consistency + trend */}
+          <div className="flex items-center gap-3 flex-wrap">
             {streak > 0 ? (
               <div className="flex items-center gap-1.5">
                 <Flame
@@ -280,12 +311,21 @@ export function HabitCard({
                 />
                 <span className="text-sm font-bold tabular-nums">{streak}</span>
                 <span className="text-xs text-muted-foreground">
-                  {streak === 1 ? 'day' : 'days'}
+                  {streak === 1 ? 'day streak' : 'day streak'}
                 </span>
               </div>
-            ) : (
-              <span className="text-xs text-muted-foreground/40">No streak yet</span>
-            )}
+            ) : null}
+            {/* Phase 12.E: 14-day consistency + trend */}
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <span className="tabular-nums font-medium">{last7Count + prev7Count}/14</span>
+              <span className="text-muted-foreground/50">days</span>
+              {trend === 'up' && (
+                <TrendingUp className="h-3 w-3 text-emerald-500 shrink-0" />
+              )}
+              {trend === 'down' && (
+                <TrendingDown className="h-3 w-3 text-rose-400 shrink-0" />
+              )}
+            </div>
             {habit.freeze_days_available > 0 && (
               <span className="flex items-center gap-0.5 text-[11px] text-sky-500 ml-auto">
                 <Snowflake className="h-3 w-3" />
@@ -294,32 +334,55 @@ export function HabitCard({
             )}
           </div>
 
-          {/* Check-in button */}
-          <button
-            type="button"
-            onClick={handleToggle}
-            disabled={toggling}
-            aria-label={isCompletedToday ? 'Unmark for today' : 'Mark complete for today'}
-            className={cn(
-              'w-full rounded-lg py-2.5 text-sm font-medium flex items-center justify-center gap-2',
-              'transition-all duration-200 disabled:opacity-60',
-              isCompletedToday
-                ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20'
-                : 'border-2 border-dashed border-muted-foreground/20 text-muted-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/5'
+          {/* Check-in + Skip buttons */}
+          <div className={cn('flex gap-2', isCompletedToday || isSkippedToday ? '' : '')}>
+            <button
+              type="button"
+              onClick={handleToggle}
+              disabled={toggling || (isSkippedToday && !isCompletedToday)}
+              aria-label={isCompletedToday ? 'Unmark for today' : 'Mark complete for today'}
+              className={cn(
+                'flex-1 rounded-lg py-2.5 text-sm font-medium flex items-center justify-center gap-2',
+                'transition-all duration-200 disabled:opacity-50',
+                isCompletedToday
+                  ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20'
+                  : 'border-2 border-dashed border-muted-foreground/20 text-muted-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/5'
+              )}
+            >
+              {isCompletedToday ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4" />
+                  {toggling ? 'Updating…' : 'Done today'}
+                </>
+              ) : (
+                <>
+                  <Circle className="h-4 w-4" />
+                  {toggling ? 'Marking…' : 'Mark done'}
+                </>
+              )}
+            </button>
+
+            {/* Phase 12.E: Skip button — only show when not already completed */}
+            {!isCompletedToday && (
+              <button
+                type="button"
+                onClick={handleSkip}
+                disabled={skipping}
+                aria-label={isSkippedToday ? 'Undo skip' : 'Skip today (intentional rest)'}
+                title={isSkippedToday ? 'Undo skip' : 'Skip today — intentional rest day'}
+                className={cn(
+                  'rounded-lg px-3 py-2.5 text-sm font-medium flex items-center justify-center gap-1.5',
+                  'transition-all duration-200 disabled:opacity-50',
+                  isSkippedToday
+                    ? 'bg-amber-400/15 border border-amber-400/30 text-amber-600 dark:text-amber-400 hover:bg-amber-400/25'
+                    : 'border border-border/50 text-muted-foreground/60 hover:border-amber-400/40 hover:text-amber-600 hover:bg-amber-400/10'
+                )}
+              >
+                <MinusCircle className="h-4 w-4" />
+                <span className="text-xs">{isSkippedToday ? 'Skipped' : 'Skip'}</span>
+              </button>
             )}
-          >
-            {isCompletedToday ? (
-              <>
-                <CheckCircle2 className="h-4 w-4" />
-                {toggling ? 'Updating…' : 'Done today'}
-              </>
-            ) : (
-              <>
-                <Circle className="h-4 w-4" />
-                {toggling ? 'Marking…' : 'Mark done today'}
-              </>
-            )}
-          </button>
+          </div>
 
           {/* Streak protection + grace hints */}
           {(canFreeze || inGraceWindow || showRecoverySuggestion) && (

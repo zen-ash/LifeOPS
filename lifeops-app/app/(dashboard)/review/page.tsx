@@ -57,6 +57,7 @@ export default async function ReviewPage() {
     { data: focusSessionsRaw },
     { data: activeHabits },
     { data: habitLogsRaw },
+    { data: habitSkipLogsRaw },
     { data: weeklyPlanRaw },
     { data: shutdownsRaw },
     { data: existingReview },
@@ -103,6 +104,14 @@ export default async function ReviewPage() {
       .gte('logged_date', weekStart)
       .lte('logged_date', weekEnd),
 
+    // Phase 12.E: habit skip logs this week
+    supabase
+      .from('habit_skip_logs')
+      .select('habit_id, skip_date')
+      .eq('user_id', user!.id)
+      .gte('skip_date', weekStart)
+      .lte('skip_date', weekEnd),
+
     // Weekly plan for this week (if one was generated)
     supabase
       .from('weekly_plans')
@@ -141,6 +150,12 @@ export default async function ReviewPage() {
     logCountByHabitId.set(log.habit_id, (logCountByHabitId.get(log.habit_id) ?? 0) + 1)
   }
 
+  // Phase 12.E: skip count per habit this week
+  const skipCountByHabitId = new Map<string, number>()
+  for (const sl of habitSkipLogsRaw ?? []) {
+    skipCountByHabitId.set(sl.habit_id, (skipCountByHabitId.get(sl.habit_id) ?? 0) + 1)
+  }
+
   const habitConsistency: HabitConsistencyItem[] = (activeHabits ?? []).map((h) => {
     const logsCount = logCountByHabitId.get(h.id) ?? 0
     // Daily habits: expected = days elapsed so far in this week
@@ -151,12 +166,14 @@ export default async function ReviewPage() {
         : (h.target_days_per_week ??
             ((Array.isArray(h.selected_weekdays) ? h.selected_weekdays.length : 0) || 1))
     const percentage = Math.min(logsCount / Math.max(expectedDays, 1), 1)
+    const skippedCount = skipCountByHabitId.get(h.id)
     return {
       habitId: h.id,
       habitTitle: h.title,
       logsCount,
       expectedDays,
       percentage,
+      ...(skippedCount !== undefined ? { skippedCount } : {}),
     }
   })
 

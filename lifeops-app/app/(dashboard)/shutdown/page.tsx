@@ -23,6 +23,9 @@ export default async function ShutdownPage() {
     { data: focusSessions },
     { data: suggestions },
     { data: existingShutdown },
+    { data: activeHabits },
+    { data: todayHabitLogs },
+    { data: todayHabitSkips },
   ] = await Promise.all([
     // Tasks the user marked done today
     supabase
@@ -68,12 +71,52 @@ export default async function ShutdownPage() {
       .eq('user_id', user!.id)
       .eq('shutdown_date', today)
       .maybeSingle(),
+
+    // Phase 12.E: active habits + today's logs/skips for habits section
+    supabase
+      .from('habits')
+      .select('id, title, frequency, selected_weekdays')
+      .eq('user_id', user!.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('habit_logs')
+      .select('habit_id')
+      .eq('user_id', user!.id)
+      .eq('logged_date', today),
+    supabase
+      .from('habit_skip_logs')
+      .select('habit_id')
+      .eq('user_id', user!.id)
+      .eq('skip_date', today),
   ])
 
   const focusMinutes = (focusSessions ?? []).reduce(
     (sum, s) => sum + (s.actual_minutes ?? s.duration_minutes ?? 0),
     0
   )
+
+  // Phase 12.E: compute today's habit status for each active habit
+  const doneHabitIds = new Set((todayHabitLogs ?? []).map((l) => l.habit_id))
+  const skippedHabitIds = new Set((todayHabitSkips ?? []).map((l) => l.habit_id))
+  // Filter habits that are scheduled for today (daily = always; weekly = check selected_weekdays)
+  const JS_DAY_TO_SHORT = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
+  const todayShort = JS_DAY_TO_SHORT[new Date().getDay()]
+  const todayHabits = (activeHabits ?? [])
+    .filter((h) => {
+      if (h.frequency === 'daily') return true
+      const days: string[] = h.selected_weekdays ?? []
+      return days.length === 0 || days.includes(todayShort)
+    })
+    .map((h) => ({
+      id: h.id,
+      title: h.title,
+      status: doneHabitIds.has(h.id)
+        ? 'done' as const
+        : skippedHabitIds.has(h.id)
+        ? 'skipped' as const
+        : 'pending' as const,
+    }))
 
   const dateLabel = new Date(today + 'T12:00:00Z').toLocaleDateString('en-US', {
     weekday: 'long',
@@ -101,6 +144,7 @@ export default async function ShutdownPage() {
 
       <ShutdownView
         today={today}
+        todayHabits={todayHabits}
         completedTasks={
           (completedToday as Array<{ id: string; title: string; priority: string }>) ?? []
         }

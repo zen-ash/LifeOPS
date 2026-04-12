@@ -126,6 +126,15 @@ export interface HabitFreezeLog {
   created_at: string
 }
 
+// Phase 12.E: intentional rest day (distinct from freeze and missed)
+export interface HabitSkipLog {
+  id: string
+  habit_id: string
+  user_id: string
+  skip_date: string
+  created_at: string
+}
+
 // Phase 5A: normalized tag
 export interface Tag {
   id: string
@@ -239,6 +248,7 @@ export type ActivityEventType =
   | 'focus_session_stopped_early'
   | 'habit_checked'
   | 'habit_skipped'
+  | 'habit_unchecked'
   | 'plan_generated'
   | 'plan_saved'
   | 'shutdown_completed'
@@ -261,6 +271,7 @@ export interface HabitConsistencyItem {
   logsCount: number
   expectedDays: number
   percentage: number
+  skippedCount?: number  // Phase 12.E: intentional skips this period
 }
 
 export interface WeeklyMetrics {
@@ -315,6 +326,8 @@ export interface PlanDay {
 export interface GeneratedPlan {
   weekStart: string
   days: PlanDay[]
+  // Phase 13.A: tasks explicitly deferred by AI when workload exceeds available time
+  deferredTasks?: string[]
 }
 
 export interface WeeklyPlan {

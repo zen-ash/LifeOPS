@@ -1,5 +1,5 @@
 # LifeOPS — Project State
-_Last updated: Phase 11.F complete — Focus Mode Upgrade: Planner→Focus handoff, planned vs actual, enriched activity log_
+_Last updated: Phase 13.B complete — Notes / Docs / Vault Linking_
 
 ---
 
@@ -55,7 +55,10 @@ Soft Eng Proj/                          ← project root
 │   ├── add_leaderboard.sql            ← Phase 6B
 │   ├── add_activity_log.sql           ← Phase 11.A
 │   ├── add_daily_shutdowns.sql        ← Phase 11.B
-│   └── add_weekly_reviews.sql         ← Phase 11.C
+│   ├── add_weekly_reviews.sql         ← Phase 11.C
+│   ├── add_user_feedback.sql          ← Phase 12.C
+│   ├── add_habit_skip_logs.sql        ← Phase 12.E
+│   └── add_vault_links.sql            ← Phase 13.B
 │
 ├── extension/                          ← Phase 8: Chrome extension (load unpacked in Chrome)
 │   ├── manifest.json                   ← Manifest V3
@@ -121,6 +124,13 @@ Soft Eng Proj/                          ← project root
     │   │   ├── button.tsx, input.tsx, label.tsx, card.tsx
     │   │   ├── badge.tsx, dialog.tsx, dropdown-menu.tsx
     │   │   ├── avatar.tsx, separator.tsx
+    │   │   └── command.tsx             ← Phase 12.A: cmdk wrapper
+    │   ├── command-palette/
+    │   │   └── CommandPalette.tsx      ← Phase 12.A: Cmd+K palette (+ Submit Feedback in 12.C)
+    │   ├── dashboard/
+    │   │   └── ActivityHeatmap.tsx     ← Phase 12.D: GitHub-style activity heatmap (52 weeks, 4-level scale)
+    │   ├── feedback/
+    │   │   └── FeedbackDialog.tsx      ← Phase 12.C: bug/feature/general feedback dialog
     │   ├── projects/
     │   │   ├── ProjectCard.tsx, AddProjectDialog.tsx
     │   │   ├── EditProjectDialog.tsx, ProjectsView.tsx
@@ -175,6 +185,8 @@ Soft Eng Proj/                          ← project root
     │   └── utils.ts                    ← cn() helper
     │
     ├── types/index.ts                  ← Profile, Project, Task, Note, Document, FocusSession, Habit, HabitLog, HabitFreezeLog, Tag, SavedView, StudyGroup, WeeklyPlan, GeneratedPlan, PlanDay, DailyShutdown, WeeklyReview, WeeklyMetrics, ReviewAISummary, ActivityLog
+    ├── lib/
+    │   └── templates.ts            ← Phase 12.B: 6 static PlannerTemplate definitions + TEMPLATE_BY_ID lookup
     └── hooks/useUser.ts
 ```
 
@@ -195,6 +207,7 @@ Soft Eng Proj/                          ← project root
 | `habits` | Active | Habit tracker with streaks |
 | `habit_logs` | Active | Per-date habit completion logs |
 | `habit_freeze_logs` | Active | Streak protection freeze records |
+| `habit_skip_logs` | Active | Phase 12.E: intentional rest days; `UNIQUE(habit_id, skip_date)`; distinct from freeze and missed |
 | `tags` | Active | Normalized tag table per user; `UNIQUE(user_id, name)` |
 | `task_tags` | Active | Join: task ↔ tag; `PRIMARY KEY(task_id, tag_id)` |
 | `note_tags` | Active | Join: note ↔ tag (notes + journal); `PRIMARY KEY(note_id, tag_id)` |
@@ -206,6 +219,8 @@ Soft Eng Proj/                          ← project root
 | `user_activity_logs` | Active | Append-only telemetry; `event_type`, `entity_type`, `entity_id`, `payload` JSONB; Phase 11.A |
 | `daily_shutdowns` | Active | One row per user per day; `UNIQUE(user_id, shutdown_date)`; `completed_tasks`/`slipped_decisions`/`tomorrow_top3` JSONB; Phase 11.B |
 | `weekly_reviews` | Active | One row per user per week; `UNIQUE(user_id, week_start)`; `metrics_json` JSONB; `ai_summary` JSONB; Phase 11.C |
+| `note_task_links` | Active | Phase 13.B junction: note↔task many-to-many; `UNIQUE(note_id, task_id)`; cascade on both FKs; RLS via user_id |
+| `document_task_links` | Active | Phase 13.B junction: document↔task many-to-many; `UNIQUE(document_id, task_id)`; cascade on both FKs; RLS via user_id |
 | `study_groups` | Schema only | Group-based study rooms — future phase |
 | `study_group_members` | Schema only | Group membership — future phase |
 
@@ -253,6 +268,9 @@ All tables have RLS enabled with `FOR ALL USING (auth.uid() = user_id)` (or `= i
 | `add_activity_log.sql` | 11.A | Yes — creates `user_activity_logs` table with RLS + 2 indexes |
 | `add_daily_shutdowns.sql` | 11.B | Yes — creates `daily_shutdowns` table with RLS; `UNIQUE(user_id, shutdown_date)` |
 | `add_weekly_reviews.sql` | 11.C | Yes — creates `weekly_reviews` table with RLS; `UNIQUE(user_id, week_start)` |
+| `add_user_feedback.sql` | 12.C | Yes — creates `user_feedback` table with INSERT-only RLS |
+| `add_habit_skip_logs.sql` | 12.E | Yes — creates `habit_skip_logs` table with RLS + index |
+| `add_vault_links.sql` | 13.B | Yes — creates `note_task_links` + `document_task_links` tables with RLS |
 
 ---
 
@@ -293,7 +311,8 @@ All tables have RLS enabled with `FOR ALL USING (auth.uid() = user_id)` (or `= i
 5. **Upcoming Tasks** — next 5 non-done tasks with due dates, sorted ascending; priority badge + overdue highlight
 6. **Notes & Documents** — 3-column grid: Notes count (→ /notes), Journal count (→ /journal), Documents count (→ /documents)
 7. **Study Buddy** — 3-column grid: buddy count + pending requests (→ /study-buddy) | leaderboard rank this week (→ /leaderboard) | AI Planner link (→ /planner)
-8. **Projects** — full project grid with AddProjectDialog
+8. **Activity Heatmap** (`ActivityHeatmap`) — Phase 12.D: GitHub-style 17-week grid; task_completed/focus_session_completed/habit_checked; 4-level color scale; native title tooltips
+9. **Projects** — full project grid with AddProjectDialog
 
 ---
 
@@ -337,6 +356,13 @@ All tables have RLS enabled with `FOR ALL USING (auth.uid() = user_id)` (or `= i
 - ✅ Phase 11.D — AI Planner Upgrade (v2 `PlanDay` schema with `tasks[]`, `habits[]`, `focus_blocks[]`, `rationale`; backward-compatible with v1 saved plans via optional fields + `normDay()` fallback; `/api/planner` route accepts `{ mode, targetDay, currentPlan }` body; `rebuild_day` generates 1 day with repair context; `rebuild_rest_of_week` generates today–Sunday with overdue task context; per-item remove (hover × on any task/habit/focus block) is pure client-state; `Rebuild My Day` button on each day card; `Rebuild Rest of Week` button in action bar; no schema migration needed — `plan_json` JSONB accepts any shape)
 - ✅ Phase 11.E — Task Intelligence (`carryToTomorrow` server action in `lib/actions/tasks.ts`; UTC-safe tomorrow date mirroring Daily Shutdown carry behavior; `getUrgencyLevel()` in `TaskRow.tsx` returning `overdue | due_today | due_soon | at_risk | normal`; `at_risk` badge for urgent+undated tasks; Carry to Tomorrow (→) hover button for overdue and due-today tasks; overdue row background tint; stronger due-date chip styling per urgency; overdue CTA banner in `TasksView.tsx` with links to `/shutdown` and `/review`; no DB migration, no type changes)
 - ✅ Phase 11.F — Focus Mode Upgrade (Planner→Focus URL handoff: `FocusBlockItem` in `PlannerView.tsx` shows hover Play icon linking to `/focus?intent=<text>&duration=45`; `/focus` page reads `searchParams` (Next.js 15 async) and passes `initialIntent`/`initialDuration` to `FocusTimer`; `FocusTimer` prefills goal + duration, selects matching preset or sets custom, shows "From planner" badge; finished state now shows "Xm of Ym planned — stopped early" when stopped early; `saveSession` enriched with `from_planner?: boolean`; activity log `logEvent` payload now includes `goal` and `from_planner`; no DB migration — `payload` column is JSONB; no new tables; no type changes to `FocusSession`)
+- ✅ Phase 12.A — Global Command Palette (`cmdk` installed; `components/ui/command.tsx` hand-written shadcn Command primitives; `components/command-palette/CommandPalette.tsx` with 3 groups: Navigation (13 items), Actions (Create Task + Start Focus), Review & Recovery (Daily Shutdown + Weekly Review); Cmd+K/Ctrl+K keyboard shortcut via `document.addEventListener` in `CommandPalette`; `open` state lifted to `AppShell`; `⌘K` hint button added to `Header` (hidden on mobile); no DB changes; no new routes)
+- ✅ Phase 12.B — Planner Templates (6 static templates in `lib/templates.ts`: Exam Prep, Internship Hunt, Coding Interview, Deep Work, Gym + Study, Side-Project Launch; template picker card grid in `PlannerEmptyState` with accent colors, focus-area pills, and toggle selection; `selectedTemplate` state in `PlannerView` persists across all generate/rebuild calls; `templateId` accepted in `app/api/planner/route.ts` body; resolved via `TEMPLATE_BY_ID` lookup; `planning_emphasis` injected as `## Weekly Template` section in system prompt; no DB changes; fully backward-compatible — templateId is optional)
+- ✅ Phase 12.C — Feedback Widget (`supabase/add_user_feedback.sql` migration: `user_feedback` table with INSERT-only RLS, no read/update/delete policies; `lib/actions/feedback.ts` server action validates type + trims message; `components/feedback/FeedbackDialog.tsx` — Dialog with category pills (bug/feature/general), textarea, pathname-captured route context, inline success state + 1.5s auto-close; `Sidebar.tsx` gets `onOpenFeedback?` prop + "Share feedback" button above user footer; `CommandPalette.tsx` gets `onOpenFeedback?` prop + "Submit Feedback" CommandItem that closes palette then opens dialog; `feedbackOpen` state in `AppShell` shared between both triggers; **manual step required**: run `add_user_feedback.sql` in Supabase SQL editor)
+- ✅ Phase 12.D — Activity Heatmap (GitHub-style 52-week contribution grid on `/dashboard`; signals: `task_completed` + `focus_session_completed` + `habit_checked` from `user_activity_logs`; server-side UTC date aggregation in dashboard page; builds complete day array from prior 52-week Sunday to today including zero-activity days; `components/dashboard/ActivityHeatmap.tsx` — pure presentational component; CSS Grid with `gridTemplateColumns: repeat(weekCount, 1fr)` stretches to card width; 4-level color scale; native `title` tooltip; Mon/Thu row labels; legend; horizontally scrollable on mobile; no new DB table, no SQL migration)
+- ✅ Phase 12.E — Habits Intelligence (`supabase/add_habit_skip_logs.sql`: `habit_skip_logs` table with `UNIQUE(habit_id, skip_date)` and INSERT-only-style RLS; `skipHabit`/`unskipHabit` server actions in `lib/actions/habits.ts`; `unlogHabit` event renamed from `habit_skipped` → `habit_unchecked`; `HabitCard` gains `skipDates` prop, Skip button with amber active state, amber color in 7-day history strip for skipped days, 14-day consistency display "X/14 days" + ↑↓ trend arrow computed client-side from existing logs; `habit_skip_logs` queried in habits page, review page, shutdown page; Daily Shutdown gains "Today's habits" section listing all habits due today with optimistic Complete/Skip buttons preserving form state; `HabitConsistencyItem` gains `skippedCount?`; Weekly Review AI prompt now distinguishes intentional skips from plain misses: "Meditation: 4/7 days (57%) (2 intentionally skipped), 1 missed"; **manual step required**: run `add_habit_skip_logs.sql` in Supabase SQL editor)
+- ✅ Phase 13.A — Workload Realism + Auto-Replanning (no new DB migration needed; `planner/page.tsx` fetches `profiles.study_hours_per_week` + pending tasks; computes `availableMinutesPerDay` and `atRiskTasks`; `PlannerView` accepts realism props; `useMemo`-derived `overloadMap` (tasks×30 + focus_blocks×45 vs available); amber "Full" badge on overloaded day cards; risk/overload banner above plan grid with "Repair Rest of Week" button; `repairContext` injected into both `handleRebuildDay` and `handleRebuildRestOfWeek` API calls when risk signals exist; `api/planner/route.ts` accepts `repairContext`, injects "Workload Realism Warning" into system prompt, adds `deferredTasks` optional field to `planSchema`; `GeneratedPlan.deferredTasks?: string[]` added to types; deferred tasks section shown below plan grid)
+- ✅ Phase 13.B — Notes / Docs / Vault Linking (`supabase/add_vault_links.sql`: two junction tables `note_task_links` + `document_task_links` — each with `user_id`, cascade FKs, `UNIQUE(note_id/document_id, task_id)`, and RLS policy; `lib/actions/links.ts`: 4 server actions `linkNoteToTask`, `unlinkNoteFromTask`, `linkDocumentToTask`, `unlinkDocumentFromTask`; `notes/page.tsx` + `documents/page.tsx`: each adds 2 parallel fetches (active tasks + link rows) to existing Promise.all; `NotesView.tsx` + `DocumentsView.tsx`: accept + thread `tasks`/`linkedTaskIds*` props; `NoteEditor.tsx`: "Linked tasks" metadata row below Tags — chips with × unlink + task selector; `DocumentCard.tsx`: linked task chips on card body + "Linked tasks" section in edit dialog with same chip+select pattern; all link/unlink operations are optimistic with server revalidation; backward compatible — existing notes/docs with no links work unchanged; **manual step required**: run `add_vault_links.sql` in Supabase SQL editor)
 
 ---
 
@@ -509,11 +535,20 @@ Missed habits and completion patterns feed into planning/review. Trend display a
 
 **Goal:** Make LifeOPS feel smart, not just polished.
 
-### Phase 13.A — Workload Realism + Auto-Replanning
-- Available-hours vs planned-hours comparison
-- Overload detection; deadline-risk detection
-- "Repair this day / repair this week" flows
-- Suggestions after missed work blocks
+### ✅ Phase 13.A — Workload Realism + Auto-Replanning
+**Complete.**
+
+**What was built:**
+- `planner/page.tsx`: now fetches `profiles.study_hours_per_week` and pending tasks in parallel. Computes `availableMinutesPerDay` (`study_hours_per_week * 60 / 5`, default 360 min = 6h) and `atRiskTasks` (tasks with `due_date` within the next 3 days). Both passed to `PlannerView` as props.
+- `PlannerView.tsx`: accepts `availableMinutesPerDay` + `atRiskTasks` props. `useMemo` recomputes `overloadMap` (planned vs available per day) whenever `plan` changes. Planned time per day = `tasks × 30 min + focus_blocks × 45 min`.
+  - **Overload badge**: amber "Full" chip in the header of any day card where `plannedMinutes > availableMinutes`.
+  - **Risk/overload banner**: shown above the plan grid when `atRiskTasks.length > 0` or `overloadedDays.length > 0`. Lists at-risk tasks and overloaded days. Contains a "Repair Rest of Week" button.
+  - **Repair context**: `handleRebuildDay` and `handleRebuildRestOfWeek` now pass `repairContext` to the API when risk signals exist.
+  - **Deferred tasks section**: shown below plan grid when `plan.deferredTasks` is populated.
+- `api/planner/route.ts`: accepts `repairContext` in request body. Adds a "Workload Realism Warning" section to the system prompt for repair/rebuild modes. Adds `deferredTasks` (optional string array) to `planSchema` so the AI can explicitly surface tasks it cannot fit.
+- `types/index.ts`: `GeneratedPlan.deferredTasks?: string[]` added (backward-compatible optional field).
+
+**No new DB tables or migrations required.** All signals are computed from existing `profiles`, `tasks`, and `weekly_plans` data.
 
 ### Phase 13.B — Notes / Docs / Vault Linking
 - Notes and documents linked to projects/tasks/plans/reviews

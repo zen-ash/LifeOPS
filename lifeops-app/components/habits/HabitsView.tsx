@@ -17,6 +17,7 @@ interface HabitsViewProps {
   habits: HabitRow[]
   logsMap: Record<string, string[]>
   freezeLogsMap: Record<string, string[]>
+  skipLogsMap: Record<string, string[]>  // Phase 12.E
   today: string
   projects: Project[]
 }
@@ -37,7 +38,7 @@ function countForTab(habits: HabitRow[], value: TabValue): number {
   return habits.filter(h => h.is_active).length
 }
 
-export function HabitsView({ habits, logsMap, freezeLogsMap, today, projects }: HabitsViewProps) {
+export function HabitsView({ habits, logsMap, freezeLogsMap, skipLogsMap, today, projects }: HabitsViewProps) {
   const [tab, setTab] = useState<TabValue>('active')
 
   const yesterday = shiftDate(today, -1)
@@ -142,6 +143,7 @@ export function HabitsView({ habits, logsMap, freezeLogsMap, today, projects }: 
               habit={habit}
               logs={logsMap[habit.id] ?? []}
               freezeDates={freezeLogsMap[habit.id] ?? []}
+              skipDates={skipLogsMap[habit.id] ?? []}
               isCompletedToday={(logsMap[habit.id] ?? []).includes(today)}
               today={today}
               yesterday={yesterday}

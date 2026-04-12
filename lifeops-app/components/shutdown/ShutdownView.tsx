@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { CheckCircle2, Circle, ChevronRight, Timer, Zap, Minus, Battery, X } from 'lucide-react'
+import { CheckCircle2, Circle, ChevronRight, Timer, Zap, Minus, Battery, X, MinusCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { completeShutdown } from '@/lib/actions/shutdown'
+import { logHabit, skipHabit } from '@/lib/actions/habits'
 import type {
   ShutdownDecisionAction,
   ShutdownDecision,
@@ -112,8 +113,16 @@ interface SuggestionTask {
   due_date: string | null
 }
 
+// Phase 12.E: habits due today with completion/skip status
+interface TodayHabitItem {
+  id: string
+  title: string
+  status: 'done' | 'skipped' | 'pending'
+}
+
 interface ShutdownViewProps {
   today: string
+  todayHabits: TodayHabitItem[]   // Phase 12.E
   completedTasks: CompletedTask[]
   slippedTasks: SlippedTask[]
   focusMinutes: number
@@ -125,12 +134,18 @@ interface ShutdownViewProps {
 
 export function ShutdownView({
   today,
+  todayHabits,
   completedTasks,
   slippedTasks,
   focusMinutes,
   tomorrowSuggestions,
   existingShutdown,
 }: ShutdownViewProps) {
+  // Phase 12.E: local habit status — optimistic updates so form state is preserved on action
+  const [habitStatuses, setHabitStatuses] = useState<Record<string, TodayHabitItem['status']>>(
+    () => Object.fromEntries(todayHabits.map((h) => [h.id, h.status]))
+  )
+
   // State — initialised from an existing record if the user re-visits
   const [decisions, setDecisions] = useState<Record<string, ShutdownDecisionAction>>(() => {
     const init: Record<string, ShutdownDecisionAction> = {}
@@ -376,7 +391,74 @@ export function ShutdownView({
         )}
       </Section>
 
-      {/* 2. Slipped tasks */}
+      {/* Phase 12.E: 2. Today's habits */}
+      {todayHabits.length > 0 && (
+        <Section
+          title="Today's habits"
+          subtitle={`${todayHabits.length} habit${todayHabits.length === 1 ? '' : 's'} scheduled today — mark any you haven't actioned`}
+        >
+          <div className="space-y-2">
+            {todayHabits.map((habit) => {
+              const status = habitStatuses[habit.id] ?? 'pending'
+              return (
+                <div key={habit.id} className="flex items-center gap-3">
+                  {/* Status icon */}
+                  {status === 'done' ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                  ) : status === 'skipped' ? (
+                    <MinusCircle className="h-4 w-4 text-amber-500 shrink-0" />
+                  ) : (
+                    <Circle className="h-4 w-4 text-muted-foreground/30 shrink-0" />
+                  )}
+
+                  <span className={cn(
+                    'text-sm flex-1 min-w-0 truncate',
+                    status !== 'pending' && 'text-muted-foreground'
+                  )}>
+                    {habit.title}
+                  </span>
+
+                  {/* Actions for pending habits */}
+                  {status === 'pending' && (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setHabitStatuses((prev) => ({ ...prev, [habit.id]: 'done' }))
+                          await logHabit(habit.id, today)
+                        }}
+                        className="text-xs px-2 py-1 rounded-md border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                      >
+                        Done
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setHabitStatuses((prev) => ({ ...prev, [habit.id]: 'skipped' }))
+                          await skipHabit(habit.id, today)
+                        }}
+                        className="text-xs px-2 py-1 rounded-md border border-border/50 text-muted-foreground hover:border-amber-400/40 hover:text-amber-600 hover:bg-amber-400/10 transition-colors"
+                      >
+                        Skip
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Status badge for already-actioned habits */}
+                  {status === 'done' && (
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 shrink-0">Done</span>
+                  )}
+                  {status === 'skipped' && (
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0">Skipped</span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </Section>
+      )}
+
+      {/* 3. Slipped tasks */}
       {slippedTasks.length > 0 && (
         <Section
           title="What slipped?"
@@ -456,7 +538,7 @@ export function ShutdownView({
         </Section>
       )}
 
-      {/* 3. Tomorrow's top 3 */}
+      {/* 4. Tomorrow's top 3 */}
       <Section
         title="Tomorrow's top 3"
         subtitle="Pick up to 3 tasks to focus on tomorrow"
@@ -525,7 +607,7 @@ export function ShutdownView({
         )}
       </Section>
 
-      {/* 4. Reflection + energy */}
+      {/* 5. Reflection + energy */}
       <Section title="How did today go?">
         {/* Energy level */}
         <div>

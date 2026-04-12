@@ -16,7 +16,7 @@ export default async function HabitsPage() {
   sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60)
   const sixtyDaysAgoStr = `${sixtyDaysAgo.getFullYear()}-${String(sixtyDaysAgo.getMonth() + 1).padStart(2, '0')}-${String(sixtyDaysAgo.getDate()).padStart(2, '0')}`
 
-  const [{ data: habits }, { data: logs }, { data: freezeLogs }, { data: projects }] =
+  const [{ data: habits }, { data: logs }, { data: freezeLogs }, { data: skipLogs }, { data: projects }] =
     await Promise.all([
       supabase
         .from('habits')
@@ -35,6 +35,12 @@ export default async function HabitsPage() {
         .select('habit_id, freeze_date')
         .eq('user_id', user!.id)
         .gte('freeze_date', sixtyDaysAgoStr),
+      // Phase 12.E: intentional skip logs
+      supabase
+        .from('habit_skip_logs')
+        .select('habit_id, skip_date')
+        .eq('user_id', user!.id)
+        .gte('skip_date', sixtyDaysAgoStr),
       supabase
         .from('projects')
         .select('id, name')
@@ -55,6 +61,13 @@ export default async function HabitsPage() {
   for (const fl of freezeLogs ?? []) {
     if (!freezeLogsMap[fl.habit_id]) freezeLogsMap[fl.habit_id] = []
     freezeLogsMap[fl.habit_id].push(fl.freeze_date)
+  }
+
+  // Phase 12.E: Build skipLogsMap: habitId → skip date strings
+  const skipLogsMap: Record<string, string[]> = {}
+  for (const sl of skipLogs ?? []) {
+    if (!skipLogsMap[sl.habit_id]) skipLogsMap[sl.habit_id] = []
+    skipLogsMap[sl.habit_id].push(sl.skip_date)
   }
 
   const activeCount = (habits ?? []).filter(h => h.is_active).length
@@ -84,6 +97,7 @@ export default async function HabitsPage() {
         habits={habits ?? []}
         logsMap={logsMap}
         freezeLogsMap={freezeLogsMap}
+        skipLogsMap={skipLogsMap}
         today={today}
         projects={projects ?? []}
       />

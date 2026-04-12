@@ -1,11 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { Pin, Trash2, Check, ArrowLeft } from 'lucide-react'
+import { Pin, Trash2, Check, ArrowLeft, X, Link2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TagInput } from '@/components/ui/tag-input'
 import { editNote, deleteNote, togglePin } from '@/lib/actions/notes'
 import { setNoteTags } from '@/lib/actions/tags'
+import { linkNoteToTask, unlinkNoteFromTask } from '@/lib/actions/links'
 import { cn } from '@/lib/utils'
 import type { Tag } from '@/types'
 
@@ -19,6 +20,9 @@ interface NoteForEdit {
 
 interface Project { id: string; name: string }
 
+// Phase 13.B
+interface TaskOption { id: string; title: string }
+
 interface NoteEditorProps {
   type: 'note' | 'journal'
   note: NoteForEdit
@@ -26,9 +30,12 @@ interface NoteEditorProps {
   projects: Project[]
   onDeleted: () => void
   onBack?: () => void
+  // Phase 13.B: task linking
+  tasks: TaskOption[]
+  linkedTaskIds: string[]
 }
 
-export function NoteEditor({ type, note, noteTags, projects, onDeleted, onBack }: NoteEditorProps) {
+export function NoteEditor({ type, note, noteTags, projects, onDeleted, onBack, tasks, linkedTaskIds }: NoteEditorProps) {
   const [title,         setTitle]         = useState(note.title)
   const [content,       setContent]       = useState(note.content ?? '')
   const [projectId,     setProjectId]     = useState(note.project_id ?? '')
@@ -40,6 +47,11 @@ export function NoteEditor({ type, note, noteTags, projects, onDeleted, onBack }
   const [pinning,       setPinning]       = useState(false)
   const [error,         setError]         = useState<string | null>(null)
   const [savedFlash,    setSavedFlash]    = useState(false)
+
+  // Phase 13.B: local linked task state (optimistic)
+  const [localLinkedIds, setLocalLinkedIds] = useState<string[]>(linkedTaskIds)
+  const [pickTaskId,     setPickTaskId]     = useState('')
+  const [linking,        setLinking]        = useState(false)
 
   async function handleSave() {
     if (!title.trim()) return
@@ -77,6 +89,30 @@ export function NoteEditor({ type, note, noteTags, projects, onDeleted, onBack }
     setIsPinned(p => !p)
     setPinning(false)
   }
+
+  // Phase 13.B: link a task
+  async function handleLink() {
+    if (!pickTaskId || localLinkedIds.includes(pickTaskId)) return
+    setLinking(true)
+    setLocalLinkedIds(prev => [...prev, pickTaskId])
+    setPickTaskId('')
+    await linkNoteToTask(note.id, pickTaskId)
+    setLinking(false)
+  }
+
+  // Phase 13.B: unlink a task
+  async function handleUnlink(taskId: string) {
+    setLocalLinkedIds(prev => prev.filter(id => id !== taskId))
+    await unlinkNoteFromTask(note.id, taskId)
+  }
+
+  // Tasks not yet linked — shown in the selector
+  const unlinkableTasks = tasks.filter(t => !localLinkedIds.includes(t.id))
+
+  // Linked tasks with titles resolved from the tasks list
+  const linkedTasks = localLinkedIds
+    .map(id => tasks.find(t => t.id === id))
+    .filter(Boolean) as TaskOption[]
 
   return (
     <div className="flex flex-col h-full">
@@ -142,6 +178,68 @@ export function NoteEditor({ type, note, noteTags, projects, onDeleted, onBack }
               <TagInput value={tagNames} onChange={setTagNames} placeholder="Add tags…" />
             </div>
           </div>
+
+          {/* Phase 13.B: Linked tasks row */}
+          {tasks.length > 0 && (
+            <div className="flex items-start gap-3">
+              <span className="text-[11px] text-muted-foreground/60 w-14 shrink-0 pt-1 flex items-center gap-0.5">
+                <Link2 className="h-2.5 w-2.5" />
+                Tasks
+              </span>
+              <div className="flex-1 flex flex-col gap-1.5">
+                {/* Linked task chips */}
+                {linkedTasks.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {linkedTasks.map(task => (
+                      <span
+                        key={task.id}
+                        className="inline-flex items-center gap-1 text-[11px] bg-primary/8 text-primary border border-primary/20 px-1.5 py-0.5 rounded-md max-w-[200px]"
+                      >
+                        <span className="truncate">{task.title}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleUnlink(task.id)}
+                          className="shrink-0 text-primary/60 hover:text-primary transition-colors"
+                          aria-label={`Unlink ${task.title}`}
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Link selector — only show when there are tasks left to link */}
+                {unlinkableTasks.length > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <select
+                      value={pickTaskId}
+                      onChange={(e) => setPickTaskId(e.target.value)}
+                      className="flex-1 h-7 rounded-lg border border-input bg-background px-2 text-xs text-muted-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <option value="">Link a task…</option>
+                      {unlinkableTasks.map(t => (
+                        <option key={t.id} value={t.id}>{t.title}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleLink}
+                      disabled={!pickTaskId || linking}
+                      className={cn(
+                        'h-7 px-2 rounded-lg text-xs font-medium transition-colors',
+                        pickTaskId
+                          ? 'bg-primary/10 text-primary hover:bg-primary/15'
+                          : 'bg-muted text-muted-foreground/40 cursor-not-allowed'
+                      )}
+                    >
+                      Link
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

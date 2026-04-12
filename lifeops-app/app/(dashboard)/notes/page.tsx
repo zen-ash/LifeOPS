@@ -20,38 +20,61 @@ type NoteTagRow = {
   tags: { id: string; name: string; color: string; user_id: string; created_at: string } | null
 }
 
+type NoteLinkRow = {
+  note_id: string
+  task_id: string
+}
+
 export default async function NotesPage() {
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const [{ data: rawNotes }, { data: projects }, { data: rawNoteTags }, { data: rawSavedViews }] =
-    await Promise.all([
-      supabase
-        .from('notes')
-        .select('id, title, content, type, project_id, is_pinned, created_at, updated_at, projects(name)')
-        .eq('user_id', user!.id)
-        .eq('type', 'note')
-        .order('is_pinned', { ascending: false })
-        .order('updated_at', { ascending: false }),
-      supabase
-        .from('projects')
-        .select('id, name')
-        .eq('user_id', user!.id)
-        .eq('status', 'active')
-        .order('name'),
-      supabase
-        .from('note_tags')
-        .select('note_id, tags(id, name, color, user_id, created_at)')
-        .eq('user_id', user!.id),
-      supabase
-        .from('saved_views')
-        .select('*')
-        .eq('user_id', user!.id)
-        .eq('entity_type', 'notes')
-        .order('created_at', { ascending: true }),
-    ])
+  const [
+    { data: rawNotes },
+    { data: projects },
+    { data: rawNoteTags },
+    { data: rawSavedViews },
+    { data: rawTasks },
+    { data: rawNoteLinks },
+  ] = await Promise.all([
+    supabase
+      .from('notes')
+      .select('id, title, content, type, project_id, is_pinned, created_at, updated_at, projects(name)')
+      .eq('user_id', user!.id)
+      .eq('type', 'note')
+      .order('is_pinned', { ascending: false })
+      .order('updated_at', { ascending: false }),
+    supabase
+      .from('projects')
+      .select('id, name')
+      .eq('user_id', user!.id)
+      .eq('status', 'active')
+      .order('name'),
+    supabase
+      .from('note_tags')
+      .select('note_id, tags(id, name, color, user_id, created_at)')
+      .eq('user_id', user!.id),
+    supabase
+      .from('saved_views')
+      .select('*')
+      .eq('user_id', user!.id)
+      .eq('entity_type', 'notes')
+      .order('created_at', { ascending: true }),
+    // Phase 13.B: active tasks for link selector
+    supabase
+      .from('tasks')
+      .select('id, title')
+      .eq('user_id', user!.id)
+      .in('status', ['todo', 'in_progress'])
+      .order('title'),
+    // Phase 13.B: existing note→task links for this user
+    supabase
+      .from('note_task_links')
+      .select('note_id, task_id')
+      .eq('user_id', user!.id),
+  ])
 
   // Build note_id → Tag[] lookup
   const tagsByNoteId: Record<string, Tag[]> = {}
@@ -59,6 +82,13 @@ export default async function NotesPage() {
     if (!row.tags) continue
     if (!tagsByNoteId[row.note_id]) tagsByNoteId[row.note_id] = []
     tagsByNoteId[row.note_id].push(row.tags as Tag)
+  }
+
+  // Phase 13.B: build note_id → task_id[] lookup
+  const linkedTaskIdsByNoteId: Record<string, string[]> = {}
+  for (const row of (rawNoteLinks as NoteLinkRow[] | null) ?? []) {
+    if (!linkedTaskIdsByNoteId[row.note_id]) linkedTaskIdsByNoteId[row.note_id] = []
+    linkedTaskIdsByNoteId[row.note_id].push(row.task_id)
   }
 
   const notes = (rawNotes as NoteRow[] | null ?? []).map((n) => ({
@@ -72,6 +102,8 @@ export default async function NotesPage() {
     created_at: n.created_at,
     updated_at: n.updated_at,
   }))
+
+  const tasks = (rawTasks ?? []) as { id: string; title: string }[]
 
   const noteCount = notes.length
   const pinnedCount = notes.filter(n => n.is_pinned).length
@@ -101,6 +133,8 @@ export default async function NotesPage() {
         projects={projects ?? []}
         tagsByNoteId={tagsByNoteId}
         savedViews={(rawSavedViews as SavedView[] | null) ?? []}
+        tasks={tasks}
+        linkedTaskIdsByNoteId={linkedTaskIdsByNoteId}
       />
     </div>
   )

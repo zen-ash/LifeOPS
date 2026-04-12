@@ -3,6 +3,7 @@ import { openai } from '@ai-sdk/openai'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { logEvent } from '@/lib/actions/activityLog'
+import { TEMPLATE_BY_ID } from '@/lib/templates'
 import type { GeneratedPlan, PlanDay } from '@/types'
 
 export const maxDuration = 30
@@ -36,6 +37,13 @@ const daySchema = z.object({
 const planSchema = z.object({
   weekStart: z.string().describe('ISO date string for Monday of this week (YYYY-MM-DD)'),
   days: z.array(daySchema),
+  // Phase 13.A: tasks explicitly deferred when the workload exceeds available time
+  deferredTasks: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Task titles that cannot be scheduled this week because the available time is genuinely full. Only populate this when tasks truly cannot fit. Each entry is a task title string. Omit or leave empty when all tasks are scheduled.'
+    ),
 })
 
 // Ordered day names for rebuild-rest-of-week range computation
@@ -84,6 +92,16 @@ export async function POST(req: Request) {
   const mode: 'full' | 'rebuild_day' | 'rebuild_rest_of_week' = body.mode ?? 'full'
   const targetDay: string | undefined = body.targetDay
   const currentPlan: GeneratedPlan | undefined = body.currentPlan
+  // Phase 12.B: optional template id — resolved to planning_emphasis text
+  const templateId: string | undefined = body.templateId
+  const template = templateId ? TEMPLATE_BY_ID[templateId] : undefined
+
+  // Phase 13.A: optional repair context from the client's realism computation
+  const repairContext: {
+    overloadedDays?: string[]
+    atRiskTaskTitles?: string[]
+    availableMinutesPerDay?: number
+  } | undefined = body.repairContext
 
   const now = new Date()
   const today = now.toISOString().split('T')[0]
@@ -235,6 +253,32 @@ ${overdueTasksText}
 Distribute overdue tasks across ${remainingDays.filter((d) => !['Saturday', 'Sunday'].includes(d)).join(', ')} — keep weekends lighter.`
   }
 
+  // Phase 12.B: template emphasis block — injected only when a template is selected
+  const templateSection = template
+    ? `\n## Weekly Template: ${template.title}\nThis plan is optimised for a "${template.title}" week. Apply the following emphasis throughout:\n${template.planning_emphasis}\n`
+    : ''
+
+  // Phase 13.A: repair context block — injected when client detects overload or deadline risk
+  const repairSection = repairContext
+    ? `
+## Workload Realism Warning — Read Before Planning
+Available time per weekday: ~${repairContext.availableMinutesPerDay ?? 360} minutes.
+Each task = ~30 min; each focus block = ~45 min. A typical day fits 2-3 tasks and 1-2 focus blocks.
+${repairContext.overloadedDays?.length ? `Days flagged as overloaded: ${repairContext.overloadedDays.join(', ')}.` : ''}
+${
+  repairContext.atRiskTaskTitles?.length
+    ? `Deadline-risk tasks (due within 3 days — prioritise these FIRST):\n${repairContext.atRiskTaskTitles.map((t) => `- ${t}`).join('\n')}`
+    : ''
+}
+
+Repair rules:
+- Schedule deadline-risk tasks in the nearest available day first.
+- Keep each day within the available time limit — reduce tasks or focus blocks if needed.
+- If the remaining workload genuinely cannot fit the remaining days, place the lowest-priority, undated tasks in the top-level deferredTasks array.
+- Every pending task must appear EITHER in a day's tasks array OR in deferredTasks — never silently omit a task.
+`
+    : ''
+
   const systemPrompt = `You are a productivity planner for a university student named ${profile?.full_name ?? 'the student'}.
 
 Today is ${todayName}, ${today}.
@@ -251,7 +295,7 @@ ${taskContext}
 
 ## Active Habits (with their schedule)
 ${habitContext}
-${modeContext}
+${modeContext}${templateSection}${repairSection}
 ## Planning Rules
 - tasks: Pick 2-3 task titles directly from the task list above. Match due date order — earlier deadlines go to earlier days. Use the exact task title.
 - focus_blocks: 1-2 specific work activities (name the actual subject or project, not just "study" or "work").
@@ -281,7 +325,7 @@ ${modeContext}
     await logEvent(supabase, user.id, {
       event_type: 'plan_generated',
       entity_type: 'weekly_plan',
-      payload: { week_start: weekStart, mode },
+      payload: { week_start: weekStart, mode, template_id: templateId ?? null },
     })
 
     return Response.json({ plan })

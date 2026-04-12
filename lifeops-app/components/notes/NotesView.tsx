@@ -24,17 +24,22 @@ interface NoteRow {
 
 interface Project { id: string; name: string }
 
+interface TaskOption { id: string; title: string }
+
 interface NotesViewProps {
   notes: NoteRow[]
   type: 'note' | 'journal'
   projects: Project[]
   tagsByNoteId: Record<string, Tag[]>
   savedViews: SavedView[]
+  // Phase 13.B: task linking
+  tasks: TaskOption[]
+  linkedTaskIdsByNoteId: Record<string, string[]>
 }
 
 type NoteTab = 'all' | 'pinned'
 
-export function NotesView({ notes, type, projects, tagsByNoteId, savedViews }: NotesViewProps) {
+export function NotesView({ notes, type, projects, tagsByNoteId, savedViews, tasks, linkedTaskIdsByNoteId }: NotesViewProps) {
   const [search,          setSearch]          = useState('')
   const [tab,             setTab]             = useState<NoteTab>('all')
   const [addOpen,         setAddOpen]         = useState(false)
@@ -297,6 +302,8 @@ export function NotesView({ notes, type, projects, tagsByNoteId, savedViews }: N
               projects={projects}
               onDeleted={() => setSelectedNoteId(null)}
               onBack={() => setSelectedNoteId(null)}
+              tasks={tasks}
+              linkedTaskIds={linkedTaskIdsByNoteId[selectedNote.id] ?? []}
             />
           ) : (
             /* Empty right pane */

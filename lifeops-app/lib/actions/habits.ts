@@ -150,12 +150,59 @@ export async function unlogHabit(habitId: string, date: string) {
 
   if (error) return { error: error.message }
 
+  // habit_unchecked = undo a completion (distinct from intentional skip)
+  await logEvent(supabase, user.id, {
+    event_type: 'habit_unchecked',
+    entity_type: 'habit',
+    entity_id: habitId,
+    payload: { date },
+  })
+
+  revalidateHabitPaths()
+  return { success: true }
+}
+
+// Phase 12.E: intentional skip — logs a rest day, does not delete a habit_log
+export async function skipHabit(habitId: string, date: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { error } = await supabase.from('habit_skip_logs').upsert(
+    { habit_id: habitId, user_id: user.id, skip_date: date },
+    { onConflict: 'habit_id,skip_date', ignoreDuplicates: true }
+  )
+  if (error) return { error: error.message }
+
   await logEvent(supabase, user.id, {
     event_type: 'habit_skipped',
     entity_type: 'habit',
     entity_id: habitId,
     payload: { date },
   })
+
+  revalidateHabitPaths()
+  return { success: true }
+}
+
+// Phase 12.E: undo an intentional skip
+export async function unskipHabit(habitId: string, date: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('habit_skip_logs')
+    .delete()
+    .eq('habit_id', habitId)
+    .eq('user_id', user.id)
+    .eq('skip_date', date)
+
+  if (error) return { error: error.message }
 
   revalidateHabitPaths()
   return { success: true }

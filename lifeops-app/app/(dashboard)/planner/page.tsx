@@ -19,15 +19,50 @@ export default async function PlannerPage() {
   } = await supabase.auth.getUser()
 
   const weekStart = getMondayOfWeek(new Date())
+  const today = new Date().toISOString().split('T')[0]
 
-  const { data: savedRow } = await supabase
-    .from('weekly_plans')
-    .select('plan_json')
-    .eq('user_id', user!.id)
-    .eq('week_start_date', weekStart)
-    .single()
+  // Phase 13.A: fetch profile + pending tasks alongside saved plan
+  const [savedRowResult, profileResult, tasksResult] = await Promise.all([
+    supabase
+      .from('weekly_plans')
+      .select('plan_json')
+      .eq('user_id', user!.id)
+      .eq('week_start_date', weekStart)
+      .single(),
+    supabase
+      .from('profiles')
+      .select('study_hours_per_week')
+      .eq('id', user!.id)
+      .single(),
+    supabase
+      .from('tasks')
+      .select('title, priority, due_date')
+      .eq('user_id', user!.id)
+      .in('status', ['todo', 'in_progress'])
+      .not('due_date', 'is', null)
+      .order('due_date', { ascending: true })
+      .limit(30),
+  ])
 
-  const savedPlan = (savedRow?.plan_json as GeneratedPlan) ?? null
+  const savedPlan = (savedRowResult.data?.plan_json as GeneratedPlan) ?? null
+
+  // Phase 13.A: compute available time per weekday from profile (default 6h)
+  const studyHoursPerWeek = profileResult.data?.study_hours_per_week ?? null
+  const availableMinutesPerDay = studyHoursPerWeek
+    ? Math.round((studyHoursPerWeek * 60) / 5)
+    : 360
+
+  // Phase 13.A: deadline-risk tasks — due within 3 days from today
+  const riskCutoffDate = new Date()
+  riskCutoffDate.setDate(riskCutoffDate.getDate() + 3)
+  const riskCutoff = riskCutoffDate.toISOString().split('T')[0]
+  const atRiskTasks = (tasksResult.data ?? [])
+    .filter((t) => t.due_date && t.due_date >= today && t.due_date <= riskCutoff)
+    .map((t) => ({
+      title: t.title,
+      priority: t.priority as string,
+      dueDate: t.due_date as string,
+    }))
 
   const weekEndDate = new Date(weekStart)
   weekEndDate.setDate(weekEndDate.getDate() + 6)
@@ -74,7 +109,12 @@ export default async function PlannerPage() {
         </div>
       </div>
 
-      <PlannerView weekStart={weekStart} savedPlan={savedPlan} />
+      <PlannerView
+        weekStart={weekStart}
+        savedPlan={savedPlan}
+        availableMinutesPerDay={availableMinutesPerDay}
+        atRiskTasks={atRiskTasks}
+      />
     </div>
   )
 }

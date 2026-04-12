@@ -20,6 +20,7 @@ import {
   TrendingUp,
   Zap,
   X,
+  MessageSquarePlus,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -53,9 +54,10 @@ interface SidebarProps {
   } | null
   mobileOpen: boolean
   onClose: () => void
+  onOpenFeedback?: () => void
 }
 
-export function Sidebar({ profile, mobileOpen, onClose }: SidebarProps) {
+export function Sidebar({ profile, mobileOpen, onClose, onOpenFeedback }: SidebarProps) {
   const pathname = usePathname()
 
   const initials =
@@ -147,6 +149,17 @@ export function Sidebar({ profile, mobileOpen, onClose }: SidebarProps) {
           </Link>
         ))}
       </nav>
+
+      {/* Phase 12.C: feedback trigger — subtle button above user footer */}
+      <div className="px-2 pb-1 shrink-0">
+        <button
+          onClick={onOpenFeedback}
+          className="flex w-full items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:bg-accent/70 hover:text-foreground transition-colors duration-150"
+        >
+          <MessageSquarePlus className="h-3.5 w-3.5 shrink-0" />
+          Share feedback
+        </button>
+      </div>
 
       {/* User footer */}
       <div className="border-t border-border/60 p-2 shrink-0">

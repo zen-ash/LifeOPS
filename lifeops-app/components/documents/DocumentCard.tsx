@@ -9,6 +9,8 @@ import {
   Trash2,
   Loader2,
   Pencil,
+  X,
+  Link2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,6 +26,7 @@ import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { deleteDocument, editDocument } from '@/lib/actions/documents'
 import { setDocumentTags } from '@/lib/actions/tags'
+import { linkDocumentToTask, unlinkDocumentFromTask } from '@/lib/actions/links'
 import { TagBadge, TagInput } from '@/components/ui/tag-input'
 import type { Tag } from '@/types'
 
@@ -46,10 +49,16 @@ interface Project {
   name: string
 }
 
+// Phase 13.B
+interface TaskOption { id: string; title: string }
+
 interface DocumentCardProps {
   doc: DocRow
   projects: Project[]
   docTags: Tag[]
+  // Phase 13.B: task linking
+  tasks: TaskOption[]
+  linkedTaskIds: string[]
 }
 
 function formatSize(bytes: number | null): string {
@@ -101,7 +110,7 @@ function getFileConfig(type: string | null): {
   }
 }
 
-export function DocumentCard({ doc, projects, docTags }: DocumentCardProps) {
+export function DocumentCard({ doc, projects, docTags, tasks, linkedTaskIds }: DocumentCardProps) {
   const [downloading,    setDownloading]    = useState(false)
   const [deleting,       setDeleting]       = useState(false)
   const [confirmDelete,  setConfirmDelete]  = useState(false)
@@ -112,10 +121,18 @@ export function DocumentCard({ doc, projects, docTags }: DocumentCardProps) {
   const [saving,         setSaving]         = useState(false)
   const [error,          setError]          = useState<string | null>(null)
 
+  // Phase 13.B: local linked task state (optimistic, scoped to edit dialog session)
+  const [localLinkedIds, setLocalLinkedIds] = useState<string[]>(linkedTaskIds)
+  const [pickTaskId,     setPickTaskId]     = useState('')
+  const [linking,        setLinking]        = useState(false)
+
   function openEdit() {
     setEditName(doc.name)
     setEditProjectId(doc.project_id ?? '')
     setEditTagNames(docTags.map((t) => t.name))
+    // Sync linked tasks from current props each time the dialog opens
+    setLocalLinkedIds(linkedTaskIds)
+    setPickTaskId('')
     setError(null)
     setEditOpen(true)
   }
@@ -165,6 +182,27 @@ export function DocumentCard({ doc, projects, docTags }: DocumentCardProps) {
     }
   }
 
+  // Phase 13.B: link a task to this document
+  async function handleLink() {
+    if (!pickTaskId || localLinkedIds.includes(pickTaskId)) return
+    setLinking(true)
+    setLocalLinkedIds(prev => [...prev, pickTaskId])
+    setPickTaskId('')
+    await linkDocumentToTask(doc.id, pickTaskId)
+    setLinking(false)
+  }
+
+  // Phase 13.B: unlink a task from this document
+  async function handleUnlink(taskId: string) {
+    setLocalLinkedIds(prev => prev.filter(id => id !== taskId))
+    await unlinkDocumentFromTask(doc.id, taskId)
+  }
+
+  const unlinkableTasks  = tasks.filter(t => !localLinkedIds.includes(t.id))
+  const linkedTasks      = localLinkedIds
+    .map(id => tasks.find(t => t.id === id))
+    .filter(Boolean) as TaskOption[]
+
   const { icon, zoneBg, badge, badgeText } = getFileConfig(doc.file_type)
 
   return (
@@ -203,6 +241,25 @@ export function DocumentCard({ doc, projects, docTags }: DocumentCardProps) {
               {docTags.map((tag) => (
                 <TagBadge key={tag.id} tag={tag} />
               ))}
+            </div>
+          )}
+
+          {/* Phase 13.B: linked task chips on the card (read-only display) */}
+          {linkedTaskIds.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {linkedTaskIds
+                .map(id => tasks.find(t => t.id === id))
+                .filter(Boolean)
+                .map(task => (
+                  <span
+                    key={task!.id}
+                    className="inline-flex items-center gap-0.5 text-[10px] bg-primary/8 text-primary border border-primary/20 px-1.5 py-0.5 rounded"
+                    title={`Linked task: ${task!.title}`}
+                  >
+                    <Link2 className="h-2 w-2 shrink-0" />
+                    <span className="truncate max-w-[80px]">{task!.title}</span>
+                  </span>
+                ))}
             </div>
           )}
 
@@ -321,6 +378,63 @@ export function DocumentCard({ doc, projects, docTags }: DocumentCardProps) {
                 placeholder="Type a tag and press Enter…"
               />
             </div>
+
+            {/* Phase 13.B: linked tasks section */}
+            {tasks.length > 0 && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  <Link2 className="h-3.5 w-3.5" />
+                  Linked tasks (optional)
+                </Label>
+
+                {/* Linked task chips */}
+                {linkedTasks.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {linkedTasks.map(task => (
+                      <span
+                        key={task.id}
+                        className="inline-flex items-center gap-1 text-xs bg-primary/8 text-primary border border-primary/20 px-2 py-1 rounded-md"
+                      >
+                        <span className="max-w-[160px] truncate">{task.title}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleUnlink(task.id)}
+                          className="shrink-0 text-primary/60 hover:text-primary transition-colors"
+                          aria-label={`Unlink ${task.title}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Link selector */}
+                {unlinkableTasks.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={pickTaskId}
+                      onChange={(e) => setPickTaskId(e.target.value)}
+                      className="flex-1 h-9 rounded-md border border-input bg-background px-2 text-sm text-muted-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <option value="">Select a task…</option>
+                      {unlinkableTasks.map(t => (
+                        <option key={t.id} value={t.id}>{t.title}</option>
+                      ))}
+                    </select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleLink}
+                      disabled={!pickTaskId || linking}
+                    >
+                      Link
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <DialogFooter>

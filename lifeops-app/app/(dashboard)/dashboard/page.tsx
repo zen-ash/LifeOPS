@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { AddProjectDialog } from '@/components/projects/AddProjectDialog'
 import { ProjectCard } from '@/components/projects/ProjectCard'
 import { HabitsDashboardWidget } from '@/components/habits/HabitsDashboardWidget'
+import { ActivityHeatmap } from '@/components/dashboard/ActivityHeatmap'
+import type { HeatmapDay } from '@/components/dashboard/ActivityHeatmap'
 import {
   FolderOpen,
   CheckSquare,
@@ -126,6 +128,14 @@ export default async function DashboardPage() {
   sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60)
   const sixtyDaysAgoStr = `${sixtyDaysAgo.getFullYear()}-${String(sixtyDaysAgo.getMonth() + 1).padStart(2, '0')}-${String(sixtyDaysAgo.getDate()).padStart(2, '0')}`
 
+  // Phase 12.D: Heatmap window — 17 weeks of UTC dates, starting from a Sunday
+  const nowUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  const thisSundayUTC = new Date(nowUTC)
+  thisSundayUTC.setUTCDate(nowUTC.getUTCDate() - nowUTC.getUTCDay())
+  const heatmapStartSunday = new Date(thisSundayUTC)
+  heatmapStartSunday.setUTCDate(thisSundayUTC.getUTCDate() - 51 * 7)
+  const heatmapStartStr = heatmapStartSunday.toISOString().split('T')[0]
+
   const [
     { data: profile },
     { data: projects },
@@ -139,6 +149,7 @@ export default async function DashboardPage() {
     { count: documentsCount },
     { data: buddyRows },
     { data: leaderboardRows },
+    { data: activityLogs },
   ] = await Promise.all([
     supabase
       .from('profiles')
@@ -197,6 +208,13 @@ export default async function DashboardPage() {
       .from('study_buddies')
       .select('id, requester_user_id, addressee_user_id, status'),
     supabase.rpc('get_weekly_leaderboard', { p_timezone: 'UTC' }),
+    // Phase 12.D: activity heatmap — only high-signal events
+    supabase
+      .from('user_activity_logs')
+      .select('occurred_at')
+      .eq('user_id', user!.id)
+      .in('event_type', ['task_completed', 'focus_session_completed', 'habit_checked'])
+      .gte('occurred_at', heatmapStartStr),
   ])
 
   const firstName = profile?.full_name?.split(' ')[0] ?? 'there'
@@ -262,6 +280,20 @@ export default async function DashboardPage() {
     .map((l) => l.habit_id)
 
   const bestStreak = Math.max(0, ...todayHabitsWithStreak.map((h) => h.streak))
+
+  // Phase 12.D: aggregate activity counts per UTC date
+  const activityCountMap: Record<string, number> = {}
+  for (const row of activityLogs ?? []) {
+    const dateStr = new Date(row.occurred_at).toISOString().split('T')[0]
+    activityCountMap[dateStr] = (activityCountMap[dateStr] ?? 0) + 1
+  }
+  const heatmapDays: HeatmapDay[] = []
+  const curDate = new Date(heatmapStartSunday)
+  while (curDate <= nowUTC) {
+    const dateStr = curDate.toISOString().split('T')[0]
+    heatmapDays.push({ date: dateStr, count: activityCountMap[dateStr] ?? 0 })
+    curDate.setUTCDate(curDate.getUTCDate() + 1)
+  }
 
   // Split tasks into overdue vs upcoming
   const overdueTasks = (upcomingTasks ?? []).filter((t) => t.due_date && isOverdue(t.due_date))
@@ -569,10 +601,15 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
+      {/* ── Phase 12.D: Activity Heatmap ────────────────────────────── */}
+      <div className="animate-fade-in-up" style={{ animationDelay: '200ms' }}>
+        <ActivityHeatmap days={heatmapDays} />
+      </div>
+
       {/* ── Projects ─────────────────────────────────────────────────── */}
       <section
         className="animate-fade-in-up"
-        style={{ animationDelay: '240ms' }}
+        style={{ animationDelay: '280ms' }}
       >
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">

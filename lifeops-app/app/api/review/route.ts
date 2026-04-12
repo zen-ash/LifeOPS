@@ -57,10 +57,14 @@ export async function POST(req: Request) {
     metrics.habitConsistency.length === 0
       ? 'No habits tracked.'
       : metrics.habitConsistency
-          .map(
-            (h) =>
-              `- ${h.habitTitle}: ${h.logsCount}/${h.expectedDays} days (${Math.round(h.percentage * 100)}%)`
-          )
+          .map((h) => {
+            const pct = Math.round(h.percentage * 100)
+            // Phase 12.E: distinguish intentional skips from plain misses
+            const skipNote = h.skippedCount ? ` (${h.skippedCount} intentionally skipped)` : ''
+            const missedDays = h.expectedDays - h.logsCount - (h.skippedCount ?? 0)
+            const missNote = missedDays > 0 ? `, ${missedDays} missed` : ''
+            return `- ${h.habitTitle}: ${h.logsCount}/${h.expectedDays} days (${pct}%)${skipNote}${missNote}`
+          })
           .join('\n')
 
   const energyText =

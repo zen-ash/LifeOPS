@@ -20,36 +20,59 @@ type DocTagRow = {
   tags: { id: string; name: string; color: string; user_id: string; created_at: string } | null
 }
 
+type DocLinkRow = {
+  document_id: string
+  task_id: string
+}
+
 export default async function DocumentsPage() {
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const [{ data: rawDocs }, { data: projects }, { data: rawDocTags }, { data: rawSavedViews }] =
-    await Promise.all([
-      supabase
-        .from('documents')
-        .select('id, name, file_path, file_type, file_size, project_id, created_at, projects(name)')
-        .eq('user_id', user!.id)
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('projects')
-        .select('id, name')
-        .eq('user_id', user!.id)
-        .eq('status', 'active')
-        .order('name'),
-      supabase
-        .from('document_tags')
-        .select('document_id, tags(id, name, color, user_id, created_at)')
-        .eq('user_id', user!.id),
-      supabase
-        .from('saved_views')
-        .select('*')
-        .eq('user_id', user!.id)
-        .eq('entity_type', 'documents')
-        .order('created_at', { ascending: true }),
-    ])
+  const [
+    { data: rawDocs },
+    { data: projects },
+    { data: rawDocTags },
+    { data: rawSavedViews },
+    { data: rawTasks },
+    { data: rawDocLinks },
+  ] = await Promise.all([
+    supabase
+      .from('documents')
+      .select('id, name, file_path, file_type, file_size, project_id, created_at, projects(name)')
+      .eq('user_id', user!.id)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('projects')
+      .select('id, name')
+      .eq('user_id', user!.id)
+      .eq('status', 'active')
+      .order('name'),
+    supabase
+      .from('document_tags')
+      .select('document_id, tags(id, name, color, user_id, created_at)')
+      .eq('user_id', user!.id),
+    supabase
+      .from('saved_views')
+      .select('*')
+      .eq('user_id', user!.id)
+      .eq('entity_type', 'documents')
+      .order('created_at', { ascending: true }),
+    // Phase 13.B: active tasks for link selector
+    supabase
+      .from('tasks')
+      .select('id, title')
+      .eq('user_id', user!.id)
+      .in('status', ['todo', 'in_progress'])
+      .order('title'),
+    // Phase 13.B: existing document→task links for this user
+    supabase
+      .from('document_task_links')
+      .select('document_id, task_id')
+      .eq('user_id', user!.id),
+  ])
 
   // Build document_id → Tag[] lookup
   const tagsByDocId: Record<string, Tag[]> = {}
@@ -57,6 +80,13 @@ export default async function DocumentsPage() {
     if (!row.tags) continue
     if (!tagsByDocId[row.document_id]) tagsByDocId[row.document_id] = []
     tagsByDocId[row.document_id].push(row.tags as Tag)
+  }
+
+  // Phase 13.B: build document_id → task_id[] lookup
+  const linkedTaskIdsByDocId: Record<string, string[]> = {}
+  for (const row of (rawDocLinks as DocLinkRow[] | null) ?? []) {
+    if (!linkedTaskIdsByDocId[row.document_id]) linkedTaskIdsByDocId[row.document_id] = []
+    linkedTaskIdsByDocId[row.document_id].push(row.task_id)
   }
 
   const documents = (rawDocs as DocRow[] | null ?? []).map((d) => ({
@@ -69,6 +99,8 @@ export default async function DocumentsPage() {
     project_name: d.projects?.name ?? null,
     created_at: d.created_at,
   }))
+
+  const tasks = (rawTasks ?? []) as { id: string; title: string }[]
 
   const docCount = documents.length
 
@@ -97,6 +129,8 @@ export default async function DocumentsPage() {
         projects={projects ?? []}
         tagsByDocId={tagsByDocId}
         savedViews={(rawSavedViews as SavedView[] | null) ?? []}
+        tasks={tasks}
+        linkedTaskIdsByDocId={linkedTaskIdsByDocId}
       />
     </div>
   )
