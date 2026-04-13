@@ -21,6 +21,9 @@ import {
   Plus,
   Play,
   MessageSquarePlus,
+  Brain,
+  Mic,
+  Sparkles,
 } from 'lucide-react'
 import {
   CommandDialog,
@@ -37,6 +40,12 @@ interface CommandPaletteProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onOpenFeedback?: () => void
+  // Phase 13.C: ask-vault dialog trigger
+  onOpenVault?: () => void
+  // Phase 15.A: voice brain dump dialog trigger
+  onOpenVoice?: () => void
+  // Phase 15.C: co-pilot NL command dialog trigger
+  onOpenCopilot?: () => void
 }
 
 // ── Command definitions ────────────────────────────────────────────────────
@@ -69,7 +78,7 @@ const RECOVERY_COMMANDS = [
   { label: 'Weekly Review',   href: '/review',   icon: TrendingUp },
 ]
 
-export function CommandPalette({ open, onOpenChange, onOpenFeedback }: CommandPaletteProps) {
+export function CommandPalette({ open, onOpenChange, onOpenFeedback, onOpenVault, onOpenVoice, onOpenCopilot }: CommandPaletteProps) {
   const router = useRouter()
 
   // Global keyboard shortcut: Cmd+K (Mac) / Ctrl+K (Win/Linux)
@@ -117,6 +126,17 @@ export function CommandPalette({ open, onOpenChange, onOpenFeedback }: CommandPa
 
         {/* Actions */}
         <CommandGroup heading="Actions">
+          {/* Phase 15.C: co-pilot — natural-language command entry */}
+          {onOpenCopilot && (
+            <CommandItem
+              value="Ask Co-Pilot Natural Language Command AI Execute"
+              onSelect={() => { onOpenChange(false); onOpenCopilot() }}
+            >
+              <Sparkles className="mr-2.5 h-4 w-4 shrink-0 text-primary" />
+              Ask Co-Pilot
+              <CommandShortcut>NL Command</CommandShortcut>
+            </CommandItem>
+          )}
           {ACTION_COMMANDS.map(({ label, href, icon: Icon, hint }) => (
             <CommandItem
               key={label}
@@ -128,6 +148,28 @@ export function CommandPalette({ open, onOpenChange, onOpenFeedback }: CommandPa
               {hint && <CommandShortcut>{hint}</CommandShortcut>}
             </CommandItem>
           ))}
+          {/* Phase 13.C: ask vault — callback command, not a navigation */}
+          {onOpenVault && (
+            <CommandItem
+              value="Ask Second Brain Ask Vault Search Notes"
+              onSelect={() => { onOpenChange(false); onOpenVault() }}
+            >
+              <Brain className="mr-2.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              Ask Second Brain
+              <CommandShortcut>Vault</CommandShortcut>
+            </CommandItem>
+          )}
+          {/* Phase 15.A: voice brain dump — callback command, not a navigation */}
+          {onOpenVoice && (
+            <CommandItem
+              value="Voice Brain Dump Record Voice Memo Transcribe"
+              onSelect={() => { onOpenChange(false); onOpenVoice() }}
+            >
+              <Mic className="mr-2.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              Voice Brain Dump
+              <CommandShortcut>Record</CommandShortcut>
+            </CommandItem>
+          )}
           {/* Phase 12.C: feedback — callback command, not a navigation */}
           {onOpenFeedback && (
             <CommandItem

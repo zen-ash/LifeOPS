@@ -41,6 +41,8 @@ interface DocRow {
   file_size: number | null
   project_id: string | null
   project_name: string | null
+  // Phase 15.B: PDF parsing state
+  parse_status: 'none' | 'pending' | 'done' | 'no_text' | 'failed'
   created_at: string
 }
 
@@ -229,6 +231,23 @@ export function DocumentCard({ doc, projects, docTags, tasks, linkedTaskIds }: D
           <p className="text-[11px] text-muted-foreground/60 mt-0.5 tabular-nums">
             {formatSize(doc.file_size)}
           </p>
+
+          {/* Phase 15.B: PDF parse status badges */}
+          {doc.parse_status === 'pending' && (
+            <span className="inline-flex items-center gap-1 mt-1 text-[10px] text-muted-foreground bg-muted border border-border/50 px-1.5 py-0.5 rounded animate-pulse">
+              Processing…
+            </span>
+          )}
+          {doc.parse_status === 'no_text' && (
+            <span className="inline-flex items-center gap-1 mt-1 text-[10px] text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded" title="No readable text found — may be a scanned PDF">
+              No text found
+            </span>
+          )}
+          {doc.parse_status === 'failed' && (
+            <span className="inline-flex items-center gap-1 mt-1 text-[10px] text-destructive bg-destructive/10 border border-destructive/20 px-1.5 py-0.5 rounded" title="Text extraction failed — PDF may be encrypted or malformed">
+              Parse failed
+            </span>
+          )}
 
           {/* Project + tags */}
           {(doc.project_name || docTags.length > 0) && (

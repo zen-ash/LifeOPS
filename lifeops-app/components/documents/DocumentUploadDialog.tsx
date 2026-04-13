@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,8 +20,22 @@ import { createClient } from '@/lib/supabase/client'
 import { addDocument } from '@/lib/actions/documents'
 import { setDocumentTags } from '@/lib/actions/tags'
 
-const ACCEPTED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
+// Phase 15.A: added text/plain + text/markdown for .txt/.md files
+const ACCEPTED_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'text/plain',
+  'text/markdown',
+  'text/x-markdown',  // some browsers report .md as this
+]
 const MAX_BYTES = 5 * 1024 * 1024 // 5 MB
+
+// Phase 15.A: text files go to vault_media bucket; all others use vault
+function bucketForType(mimeType: string): string {
+  return mimeType.startsWith('text/') ? 'vault_media' : 'vault'
+}
 
 const SELECT_CLS =
   'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
@@ -39,21 +54,28 @@ function sanitizeFilename(filename: string): string {
 }
 
 export function DocumentUploadDialog({ projects }: { projects: Project[] }) {
+  const router = useRouter()
+
   const [open, setOpen]           = useState(false)
   const [file, setFile]           = useState<File | null>(null)
   const [title, setTitle]         = useState('')
   const [projectId, setProjectId] = useState('')
   const [tagNames, setTagNames]   = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
+  const [uploadStep, setUploadStep] = useState<'uploading' | 'processing'>('uploading')
   const [error, setError]         = useState<string | null>(null)
+  // Phase 15.B: shown after upload when a PDF has no extractable text
+  const [parseWarning, setParseWarning] = useState<string | null>(null)
   const fileInputRef              = useRef<HTMLInputElement>(null)
+
+  const isPdf = file?.type === 'application/pdf'
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const selected = e.target.files?.[0] ?? null
     if (!selected) return
 
     if (!ACCEPTED_TYPES.includes(selected.type)) {
-      setError('Only PDF, JPEG, PNG, and WebP files are supported.')
+      setError('Supported formats: PDF, JPEG, PNG, WebP, TXT, MD.')
       setFile(null)
       return
     }
@@ -66,6 +88,7 @@ export function DocumentUploadDialog({ projects }: { projects: Project[] }) {
     setFile(selected)
     setTitle(stripExtension(selected.name))
     setError(null)
+    setParseWarning(null)
   }
 
   async function handleUpload() {
@@ -73,7 +96,9 @@ export function DocumentUploadDialog({ projects }: { projects: Project[] }) {
     if (!title.trim()) { setError('Please enter a title.'); return }
 
     setUploading(true)
+    setUploadStep('uploading')
     setError(null)
+    setParseWarning(null)
 
     const supabase = createClient()
     const {
@@ -90,9 +115,12 @@ export function DocumentUploadDialog({ projects }: { projects: Project[] }) {
     const safeName  = sanitizeFilename(file.name)
     const filePath  = `${user.id}/${timestamp}-${safeName}`
 
+    // Phase 15.A: text files go to vault_media; PDF/images go to vault
+    const bucket = bucketForType(file.type)
+
     // Upload to Supabase Storage
     const { error: storageError } = await supabase.storage
-      .from('vault')
+      .from(bucket)
       .upload(filePath, file, { contentType: file.type })
 
     if (storageError) {
@@ -102,17 +130,19 @@ export function DocumentUploadDialog({ projects }: { projects: Project[] }) {
     }
 
     // Save metadata to database
+    // Phase 15.B: PDFs are inserted with parse_status 'pending'
     const result = await addDocument({
       name: title.trim(),
       file_path: filePath,
       file_type: file.type,
       file_size: file.size,
       project_id: projectId || null,
+      parse_status: isPdf ? 'pending' : 'none',
     })
 
     if (result?.error) {
       // Clean up orphaned storage file
-      await supabase.storage.from('vault').remove([filePath])
+      await supabase.storage.from(bucket).remove([filePath])
       setError(result.error)
       setUploading(false)
       return
@@ -123,30 +153,79 @@ export function DocumentUploadDialog({ projects }: { projects: Project[] }) {
       await setDocumentTags(result.documentId, tagNames)
     }
 
-    // Reset and close
+    // Phase 15.B: for PDFs, call the extraction endpoint before closing
+    if (isPdf && result.documentId) {
+      setUploadStep('processing')
+      try {
+        const res  = await fetch('/api/process-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ documentId: result.documentId, filePath }),
+        })
+        const data = await res.json()
+
+        if (data.status === 'no_text') {
+          // File saved but no readable text — keep dialog open with a warning
+          setParseWarning(
+            'File saved! However, no readable text was found — this PDF may be a scanned document. ' +
+            'It is stored in your Vault but won\'t appear in Ask Vault search.'
+          )
+          setUploading(false)
+          resetForm()
+          router.refresh()
+          return
+        }
+        if (data.status === 'failed' || !res.ok) {
+          // File saved but extraction failed — warn, don't block
+          setError(
+            'File saved, but text extraction failed. The PDF may be encrypted or malformed. ' +
+            'It is stored in your Vault but won\'t be searchable.'
+          )
+          setUploading(false)
+          resetForm()
+          router.refresh()
+          return
+        }
+        // status === 'done' — fall through to normal close
+      } catch {
+        // Network error — file is already saved, just warn
+        setError('File saved, but we could not process it for search. Try again later.')
+        setUploading(false)
+        resetForm()
+        router.refresh()
+        return
+      }
+    }
+
+    // Happy path — reset, refresh, close
+    resetForm()
+    router.refresh()
+    setUploading(false)
+    setOpen(false)
+  }
+
+  function resetForm() {
     setFile(null)
     setTitle('')
     setProjectId('')
     setTagNames([])
-    setError(null)
-    setUploading(false)
     if (fileInputRef.current) fileInputRef.current.value = ''
-    setOpen(false)
   }
 
   function handleOpenChange(next: boolean) {
     if (!uploading) {
       setOpen(next)
       if (!next) {
-        setFile(null)
-        setTitle('')
-        setProjectId('')
-        setTagNames([])
+        resetForm()
         setError(null)
-        if (fileInputRef.current) fileInputRef.current.value = ''
+        setParseWarning(null)
       }
     }
   }
+
+  const uploadLabel = uploading
+    ? uploadStep === 'processing' ? 'Processing…' : 'Uploading…'
+    : 'Upload'
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -161,7 +240,7 @@ export function DocumentUploadDialog({ projects }: { projects: Project[] }) {
         <DialogHeader>
           <DialogTitle>Upload document</DialogTitle>
           <DialogDescription>
-            PDF or image · max 5 MB. Files are stored privately.
+            PDF, image, TXT, or MD · max 5 MB. Files are stored privately.
           </DialogDescription>
         </DialogHeader>
 
@@ -172,6 +251,20 @@ export function DocumentUploadDialog({ projects }: { projects: Project[] }) {
             </div>
           )}
 
+          {/* Phase 15.B: soft warning for no-text PDFs */}
+          {parseWarning && (
+            <div className="p-3 text-sm text-amber-700 dark:text-amber-400 bg-amber-500/10 rounded-md border border-amber-500/20">
+              {parseWarning}
+            </div>
+          )}
+
+          {/* Processing indicator for PDFs */}
+          {uploading && uploadStep === 'processing' && (
+            <p className="text-xs text-muted-foreground text-center py-1">
+              Extracting text and preparing AI search…
+            </p>
+          )}
+
           {/* File picker */}
           <div className="space-y-2">
             <Label htmlFor="doc-file">File *</Label>
@@ -179,13 +272,16 @@ export function DocumentUploadDialog({ projects }: { projects: Project[] }) {
               ref={fileInputRef}
               id="doc-file"
               type="file"
-              accept=".pdf,.jpg,.jpeg,.png,.webp"
+              accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.md"
               onChange={handleFileChange}
               className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             />
             {file && (
               <p className="text-[11px] text-muted-foreground">
                 {file.name} — {(file.size / 1024).toFixed(0)} KB
+                {isPdf && (
+                  <span className="ml-1.5 text-primary/70">· text will be extracted for AI search</span>
+                )}
               </p>
             )}
           </div>
@@ -234,21 +330,33 @@ export function DocumentUploadDialog({ projects }: { projects: Project[] }) {
         </div>
 
         <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => handleOpenChange(false)}
-            disabled={uploading}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={handleUpload}
-            disabled={uploading || !file || !title.trim()}
-          >
-            {uploading ? 'Uploading…' : 'Upload'}
-          </Button>
+          {/* Show Close instead of Cancel when a parse warning/error is being shown */}
+          {(parseWarning || (error && !uploading)) ? (
+            <Button
+              type="button"
+              onClick={() => { setOpen(false); resetForm(); setError(null); setParseWarning(null) }}
+            >
+              Close
+            </Button>
+          ) : (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleOpenChange(false)}
+                disabled={uploading}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={handleUpload}
+                disabled={uploading || !file || !title.trim()}
+              >
+                {uploadLabel}
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

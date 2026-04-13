@@ -1,5 +1,5 @@
 # LifeOPS — Project State
-_Last updated: Phase 13.B complete — Notes / Docs / Vault Linking_
+_Last updated: Phase 15.C complete — Co-Pilot Command Line_
 
 ---
 
@@ -21,7 +21,7 @@ It is a multi-phase project being built incrementally, one phase at a time.
 | Styling | Tailwind CSS v3 + shadcn/ui (Radix primitives, hand-written) |
 | Auth | Supabase Auth (email/password) |
 | Database | Supabase PostgreSQL |
-| File storage | Supabase Storage (`vault` private bucket — active since Phase 4C) |
+| File storage | Supabase Storage (`vault` + `vault_media` private buckets — vault since 4C, vault_media since 15.A) |
 | Theme | next-themes (dark/light/system) |
 | Deployment target | Vercel |
 | Package manager | npm |
@@ -58,7 +58,12 @@ Soft Eng Proj/                          ← project root
 │   ├── add_weekly_reviews.sql         ← Phase 11.C
 │   ├── add_user_feedback.sql          ← Phase 12.C
 │   ├── add_habit_skip_logs.sql        ← Phase 12.E
-│   └── add_vault_links.sql            ← Phase 13.B
+│   ├── add_vault_links.sql            ← Phase 13.B
+│   ├── add_vault_embeddings.sql       ← Phase 13.C
+│   ├── add_calendar_events.sql        ← Phase 14.A
+│   ├── add_calendar_sync.sql          ← Phase 14.B
+│   ├── add_vault_media.sql            ← Phase 15.A
+│   └── add_pdf_parsing.sql            ← Phase 15.B
 │
 ├── extension/                          ← Phase 8: Chrome extension (load unpacked in Chrome)
 │   ├── manifest.json                   ← Manifest V3
@@ -89,7 +94,10 @@ Soft Eng Proj/                          ← project root
     │   ├── api/
     │   │   ├── chat/route.ts           ← Phase 7A: streaming AI chat endpoint
     │   │   ├── planner/route.ts        ← Phase 7B: generateObject weekly plan endpoint
-    │   │   └── review/route.ts         ← Phase 11.C: generateObject weekly review AI summary
+    │   │   ├── review/route.ts         ← Phase 11.C: generateObject weekly review AI summary
+    │   │   ├── transcribe/route.ts     ← Phase 15.A: Whisper audio transcription endpoint
+    │   │   ├── process-pdf/route.ts    ← Phase 15.B: PDF text extraction endpoint (maxDuration=30)
+    │   │   └── copilot/route.ts        ← Phase 15.C: NL command parse-only endpoint (returns tool call, never mutates)
     │   ├── auth/
     │   │   ├── login/page.tsx
     │   │   ├── register/page.tsx
@@ -126,7 +134,8 @@ Soft Eng Proj/                          ← project root
     │   │   ├── avatar.tsx, separator.tsx
     │   │   └── command.tsx             ← Phase 12.A: cmdk wrapper
     │   ├── command-palette/
-    │   │   └── CommandPalette.tsx      ← Phase 12.A: Cmd+K palette (+ Submit Feedback in 12.C)
+    │   │   ├── CommandPalette.tsx      ← Phase 12.A: Cmd+K palette (+ Submit Feedback in 12.C; + Ask Co-Pilot in 15.C)
+    │   │   └── CopilotDialog.tsx       ← Phase 15.C: 3-step NL command dialog (input → preview → execute)
     │   ├── dashboard/
     │   │   └── ActivityHeatmap.tsx     ← Phase 12.D: GitHub-style activity heatmap (52 weeks, 4-level scale)
     │   ├── feedback/
@@ -149,6 +158,9 @@ Soft Eng Proj/                          ← project root
     │   │   ├── NoteDialog.tsx, NoteCard.tsx, NotesView.tsx
     │   ├── documents/
     │   │   ├── DocumentUploadDialog.tsx, DocumentCard.tsx, DocumentsView.tsx
+    │   ├── vault/
+    │   │   ├── VaultDialog.tsx         ← Phase 13.C: Ask Second Brain Q&A dialog
+    │   │   └── VoiceMemoDialog.tsx     ← Phase 15.A: Voice Brain Dump record + transcribe
     │   ├── saved-views/
     │   │   └── SavedViewsPanel.tsx     ← saved filter preset chips (Phase 5B)
     │   ├── study-buddy/
@@ -170,10 +182,11 @@ Soft Eng Proj/                          ← project root
     │   ├── actions/
     │   │   ├── onboarding.ts
     │   │   ├── projects.ts
-    │   │   ├── tasks.ts                ← addTask, editTask, deleteTask, toggleTaskStatus, rescheduleTask, carryToTomorrow
+    │   │   ├── tasks.ts                ← addTask, editTask, deleteTask, toggleTaskStatus, rescheduleTask, carryToTomorrow, createTaskDirect, rescheduleMultipleTasks
     │   │   ├── focus.ts                ← saveSession (with from_planner; enriched logEvent payload), deleteSession
     │   │   ├── habits.ts               ← addHabit, editHabit, deleteHabit, logHabit, unlogHabit, convertHabitToTask, applyFreeze
-    │   │   ├── notes.ts                ← addNote, editNote, deleteNote, togglePin
+    │   │   ├── notes.ts                ← addNote, editNote, deleteNote, togglePin, saveTranscriptAsNote
+    │   │   ├── embeddings.ts           ← refreshNoteEmbeddings, refreshDocumentEmbeddings (50-chunk PDF), refreshDocumentNameEmbedding (legacy alias)
     │   │   ├── documents.ts            ← addDocument, editDocument, deleteDocument
     │   │   ├── tags.ts                 ← setTaskTags, setNoteTags, setDocumentTags (Phase 5A)
     │   │   ├── savedViews.ts           ← createSavedView, deleteSavedView, renameSavedView (Phase 5B)
@@ -181,7 +194,10 @@ Soft Eng Proj/                          ← project root
     │   │   ├── planner.ts              ← savePlan (upsert weekly_plans) (Phase 7B)
     │   │   ├── activityLog.ts          ← logEvent helper (Phase 11.A; no 'use server')
     │   │   ├── shutdown.ts             ← completeShutdown server action (Phase 11.B)
-    │   │   └── review.ts               ← saveWeeklyReview server action (Phase 11.C)
+    │   │   ├── review.ts               ← saveWeeklyReview server action (Phase 11.C)
+    │   │   ├── calendar.ts             ← Phase 14.A/B: isCalendarConnected, getFreshAccessToken (exported), syncCalendarEvents
+    │   │   ├── calendarActions.ts      ← Phase 14.A/B: disconnectCalendar, syncPlanToCalendar server actions
+    │   │   └── calendarSync.ts         ← Phase 14.B: syncPlanFocusBlocksToCalendar (core write logic, no 'use server')
     │   └── utils.ts                    ← cn() helper
     │
     ├── types/index.ts                  ← Profile, Project, Task, Note, Document, FocusSession, Habit, HabitLog, HabitFreezeLog, Tag, SavedView, StudyGroup, WeeklyPlan, GeneratedPlan, PlanDay, DailyShutdown, WeeklyReview, WeeklyMetrics, ReviewAISummary, ActivityLog
@@ -221,6 +237,10 @@ Soft Eng Proj/                          ← project root
 | `weekly_reviews` | Active | One row per user per week; `UNIQUE(user_id, week_start)`; `metrics_json` JSONB; `ai_summary` JSONB; Phase 11.C |
 | `note_task_links` | Active | Phase 13.B junction: note↔task many-to-many; `UNIQUE(note_id, task_id)`; cascade on both FKs; RLS via user_id |
 | `document_task_links` | Active | Phase 13.B junction: document↔task many-to-many; `UNIQUE(document_id, task_id)`; cascade on both FKs; RLS via user_id |
+| `vault_embeddings` | Active | Phase 13.C: `vector(1536)` chunks from notes (and document names); explicit `note_id`/`document_id` FKs with cascade delete; HNSW index; RLS; `match_embeddings` SECURITY DEFINER RPC uses `auth.uid()` |
+| `calendar_connections` | Active | Phase 14.A: Google OAuth tokens per user; `UNIQUE(user_id)`; access/refresh tokens stored server-side only; RLS |
+| `calendar_events` | Active | Phase 14.A/B: cached Google Calendar events; `UNIQUE(user_id, provider_event_id)`; RLS; `is_lifeops_managed boolean` (Phase 14.B) — true when LifeOPS pushed the event; index on `(user_id, start_time)` |
+| `calendar_sync_mappings` | Active | Phase 14.B: maps LifeOPS focus blocks → Google event IDs; `UNIQUE(user_id, week_start, day_name, block_text)`; RLS; index on `(user_id, week_start)` |
 | `study_groups` | Schema only | Group-based study rooms — future phase |
 | `study_group_members` | Schema only | Group membership — future phase |
 
@@ -230,7 +250,7 @@ Soft Eng Proj/                          ← project root
 
 **`notes`**: `type TEXT` (either `'note'` or `'journal'`), `is_pinned`, `tags TEXT[]`, `project_id`
 
-**`documents`**: `name`, `file_path` (path in vault bucket), `file_type`, `file_size`, `project_id`, `updated_at`
+**`documents`**: `name`, `file_path` (path in vault/vault_media bucket), `file_type`, `file_size`, `project_id`, `updated_at`, `extracted_text TEXT NULL` (Phase 15.B), `parse_status TEXT DEFAULT 'none'` (Phase 15.B — values: `none|pending|done|no_text|failed`)
 
 **`tasks`**: `status` (`todo`|`in_progress`|`done`|`cancelled`), `priority` (`low`|`medium`|`high`|`urgent`), `due_date`, `tags TEXT[]`, `estimated_minutes`
 
@@ -240,11 +260,13 @@ All tables have RLS enabled with `FOR ALL USING (auth.uid() = user_id)` (or `= i
 
 ### Supabase Storage
 
-- **Bucket:** `vault` (private, NOT public)
+- **Buckets:** `vault` (PDFs + images, private) and `vault_media` (TXT/MD files, private — Phase 15.A)
 - **Path format:** `<user_id>/<timestamp>-<sanitized_filename>`
-- **Policies:** INSERT/SELECT/DELETE on `storage.objects` scoped to `bucket_id = 'vault'` and `auth.uid()::text = (string_to_array(name, '/'))[1]`
+- **Policies:** INSERT/SELECT/DELETE on `storage.objects` scoped to the bucket and `auth.uid()::text = (string_to_array(name, '/'))[1]`
+- **Routing:** `bucketForType(mimeType)` in `DocumentUploadDialog` — `text/*` → `vault_media`; everything else → `vault`; `deleteDocument` determines bucket from stored `file_type`
 - **Downloads:** via 1-hour signed URLs (generated browser-side via `createClient()`)
-- **Uploads:** client-side upload → then `addDocument` server action inserts DB row; on DB failure, orphaned file is cleaned up from storage
+- **Uploads:** client-side upload → then `addDocument` server action inserts DB row; on DB failure, orphaned file is cleaned up from same bucket
+- **Voice memos:** NOT stored — audio Blob is discarded after Whisper transcription; transcript saved as a Note
 
 ### SQL Migrations — all must be run
 
@@ -271,6 +293,11 @@ All tables have RLS enabled with `FOR ALL USING (auth.uid() = user_id)` (or `= i
 | `add_user_feedback.sql` | 12.C | Yes — creates `user_feedback` table with INSERT-only RLS |
 | `add_habit_skip_logs.sql` | 12.E | Yes — creates `habit_skip_logs` table with RLS + index |
 | `add_vault_links.sql` | 13.B | Yes — creates `note_task_links` + `document_task_links` tables with RLS |
+| `add_vault_embeddings.sql` | 13.C | Yes — enables pgvector; creates `vault_embeddings` table + HNSW index + RLS + `match_embeddings` SECURITY DEFINER RPC |
+| `add_calendar_events.sql` | 14.A | Yes — creates `calendar_connections` + `calendar_events` tables with RLS |
+| `add_calendar_sync.sql` | 14.B | Yes — `ALTER TABLE calendar_events ADD COLUMN is_lifeops_managed`; creates `calendar_sync_mappings` table with RLS + index |
+| `add_vault_media.sql` | 15.A | Yes — creates `vault_media` private Storage bucket (10 MB limit, text/plain + text/markdown + text/x-markdown + image/* MIME); 3 RLS policies scoped to user path prefix |
+| `add_pdf_parsing.sql` | 15.B | Yes — `ALTER TABLE documents ADD COLUMN extracted_text TEXT, ADD COLUMN parse_status TEXT NOT NULL DEFAULT 'none'` |
 
 ---
 
@@ -362,6 +389,12 @@ All tables have RLS enabled with `FOR ALL USING (auth.uid() = user_id)` (or `= i
 - ✅ Phase 12.D — Activity Heatmap (GitHub-style 52-week contribution grid on `/dashboard`; signals: `task_completed` + `focus_session_completed` + `habit_checked` from `user_activity_logs`; server-side UTC date aggregation in dashboard page; builds complete day array from prior 52-week Sunday to today including zero-activity days; `components/dashboard/ActivityHeatmap.tsx` — pure presentational component; CSS Grid with `gridTemplateColumns: repeat(weekCount, 1fr)` stretches to card width; 4-level color scale; native `title` tooltip; Mon/Thu row labels; legend; horizontally scrollable on mobile; no new DB table, no SQL migration)
 - ✅ Phase 12.E — Habits Intelligence (`supabase/add_habit_skip_logs.sql`: `habit_skip_logs` table with `UNIQUE(habit_id, skip_date)` and INSERT-only-style RLS; `skipHabit`/`unskipHabit` server actions in `lib/actions/habits.ts`; `unlogHabit` event renamed from `habit_skipped` → `habit_unchecked`; `HabitCard` gains `skipDates` prop, Skip button with amber active state, amber color in 7-day history strip for skipped days, 14-day consistency display "X/14 days" + ↑↓ trend arrow computed client-side from existing logs; `habit_skip_logs` queried in habits page, review page, shutdown page; Daily Shutdown gains "Today's habits" section listing all habits due today with optimistic Complete/Skip buttons preserving form state; `HabitConsistencyItem` gains `skippedCount?`; Weekly Review AI prompt now distinguishes intentional skips from plain misses: "Meditation: 4/7 days (57%) (2 intentionally skipped), 1 missed"; **manual step required**: run `add_habit_skip_logs.sql` in Supabase SQL editor)
 - ✅ Phase 13.A — Workload Realism + Auto-Replanning (no new DB migration needed; `planner/page.tsx` fetches `profiles.study_hours_per_week` + pending tasks; computes `availableMinutesPerDay` and `atRiskTasks`; `PlannerView` accepts realism props; `useMemo`-derived `overloadMap` (tasks×30 + focus_blocks×45 vs available); amber "Full" badge on overloaded day cards; risk/overload banner above plan grid with "Repair Rest of Week" button; `repairContext` injected into both `handleRebuildDay` and `handleRebuildRestOfWeek` API calls when risk signals exist; `api/planner/route.ts` accepts `repairContext`, injects "Workload Realism Warning" into system prompt, adds `deferredTasks` optional field to `planSchema`; `GeneratedPlan.deferredTasks?: string[]` added to types; deferred tasks section shown below plan grid)
+- ✅ Phase 14.A — Calendar Integration Foundation (`supabase/add_calendar_events.sql`: `calendar_connections` table (UNIQUE on `user_id`, stores Google OAuth tokens server-side); `calendar_events` table (UNIQUE `(user_id, provider_event_id)`, RLS, index on `(user_id, start_time)`); `lib/actions/calendar.ts`: `isCalendarConnected(userId)`, `getFreshAccessToken(userId)` refreshes via `oauth2.googleapis.com/token` when `expires_at` within 60s, removes broken connections; `syncCalendarEvents(userId, weekStart, weekEnd)` calls Google Calendar API with `singleEvents=true`, filters cancelled + transparent events, delete-and-reinsert cached events; `lib/actions/calendarActions.ts`: `disconnectCalendar()` server action deletes connection + all events + `revalidatePath('/planner')`; `/api/calendar/connect/route.ts`: GET redirects to Google OAuth consent; `/api/calendar/callback/route.ts`: exchanges code for tokens, upserts `calendar_connections`, redirects to `/planner?calendar=connected`; `components/planner/CalendarConnectBanner.tsx`: shows "Connect Google Calendar" link (not connected) or green dot + disconnect button (connected); `planner/page.tsx`: calls `isCalendarConnected` + `syncCalendarEvents` server-side, builds `calendarEventsByDay` and `calendarBusyMinutesByDay` via UTC date mapping, passes to `PlannerView`; `PlannerView.tsx`: `computeOverload` now subtracts `calendarBusyByDay[day]` from available minutes; `DayCard` renders read-only sky-blue "Calendar" section above focus blocks; all calendar props optional — planner is fully backward-compatible when not connected)
+- ✅ Phase 14.B — Two-Way Calendar Sync (`supabase/add_calendar_sync.sql`: `ALTER TABLE calendar_events ADD COLUMN is_lifeops_managed boolean NOT NULL DEFAULT false`; new `calendar_sync_mappings` table with `UNIQUE(user_id, week_start, day_name, block_text)` — maps planner focus block text to Google event IDs; RLS; index on `(user_id, week_start)`; `lib/actions/calendarSync.ts`: `syncPlanFocusBlocksToCalendar(accessToken, userId, weekStart, plan)` iterates all focus blocks, creates new Google events (title `[LifeOPS] <text>`, `extendedProperties.private.lifeops_managed = "true"`, 09:00–09:45 UTC) or patches existing, deletes stale events when blocks removed; 404 on PATCH triggers cleanup + recreate; 403 returns human-readable reconnect error; `lib/actions/calendar.ts`: `extendedProperties` added to Google API type; `is_lifeops_managed` detected and stored on insert; `getFreshAccessToken` now exported; `lib/actions/calendarActions.ts`: `syncPlanToCalendar(weekStart, plan)` server action; `disconnectCalendar` also deletes `calendar_sync_mappings`; `/api/calendar/connect/route.ts`: scope upgraded from `calendar.readonly` to `calendar.events`; `planner/page.tsx`: `calendarBusyMinutesByDay` excludes `is_lifeops_managed` events (double-count prevention); passes `calendarConnected` to `PlannerView`; `PlannerView.tsx`: DayCard Calendar section filters out `is_lifeops_managed` events; "Sync to Calendar" button in action bar; `markDirty` resets sync status; `types/index.ts`: `is_lifeops_managed: boolean` added to `CalendarEvent`; **required setup**: run `add_calendar_sync.sql` in Supabase SQL editor; existing 14.A users must disconnect + reconnect to get write scope)
+- ✅ Phase 13.C — Chat with Your Vault (`supabase/add_vault_embeddings.sql`: `CREATE EXTENSION vector`; `vault_embeddings` table with `note_id`/`document_id` explicit nullable FKs (cascade), `embedding vector(1536)`, HNSW cosine index, RLS; `match_embeddings(query_embedding, match_count)` SECURITY DEFINER function uses `auth.uid()` internally — caller cannot bypass user filter; `lib/actions/embeddings.ts`: `chunkText()` splits on paragraphs then sentence boundaries (max 500 chars, 15 chunks); `refreshNoteEmbeddings(noteId, userId, title, content)` delete-and-reinsert via `embedMany()` batch call; `refreshDocumentNameEmbedding(documentId, userId, name)` embeds document name as single lightweight chunk; `lib/actions/notes.ts` + `lib/actions/documents.ts`: `after()` from `next/server` fires embedding refresh post-response, wrapped in try/catch so failure never breaks the save; cascade delete on `note_id`/`document_id` handles embedding cleanup on deletion; `app/api/vault/route.ts`: embeds query with `text-embedding-3-small`, calls `match_embeddings` RPC, filters to similarity > 0.3, builds grounded prompt that prohibits outside-knowledge answers, returns `{ answer, sources }`; fallback: "I don't have this in your notes."; `components/vault/VaultDialog.tsx`: compact Dialog with textarea, loading state, answer + source chips, "ask another" reset; `components/command-palette/CommandPalette.tsx`: "Ask Second Brain" callback command item; `components/layout/AppShell.tsx`: `vaultOpen` state + `VaultDialog` mounted globally; **manual steps required**: 1) enable pgvector in Supabase Dashboard → Extensions; 2) run `add_vault_embeddings.sql` in SQL editor)
+- ✅ Phase 15.C — Co-Pilot Command Line (natural-language command entry in ⌘K palette; `app/api/copilot/route.ts`: auth-gated, fetches up to 15 active tasks for context, calls OpenAI `gpt-4o-mini` via Vercel AI SDK `generateText` with `toolChoice: 'required'` + `maxSteps: 1`; tools: `create_task(title, priority, due_date, estimated_minutes)` + `reschedule_tasks(task_ids[], task_titles[], new_date)` — both strict Zod schemas; client sends `localDate`/`localDayName`/`timezone` captured at click time so relative date phrases resolve to the user's local TZ; route returns `{ tool, args }` — never executes; `components/command-palette/CopilotDialog.tsx`: 6-state machine `input → parsing → preview → executing → done | error`; `PreviewCard` renders human-readable summary of the pending action; "Rethink" returns to input with prompt preserved; on confirm calls `createTaskDirect` or `rescheduleMultipleTasks` then `router.refresh()`; `lib/actions/tasks.ts`: `createTaskDirect(data)` — object-based task creation bypassing FormData; `rescheduleMultipleTasks(taskIds, newDate)` — single batch UPDATE WHERE id IN (...); both call `revalidateTaskPaths()`; `CommandPalette.tsx`: "Ask Co-Pilot" item at top of Actions group with `onOpenCopilot` callback; `AppShell.tsx`: `copilotOpen` state + `CopilotDialog` mounted globally; no DB migration needed; no destructive tools)
+- ✅ Phase 15.B — Advanced Document Parsing / PDF Ingestion (`supabase/add_pdf_parsing.sql`: `extracted_text TEXT NULL` + `parse_status TEXT NOT NULL DEFAULT 'none'` on `documents`; `next.config.ts`: `serverExternalPackages: ['pdf-parse']` prevents webpack from bundling pdf-parse and triggering the test-fixture require; `app/api/process-pdf/route.ts`: `maxDuration = 30`; auth + ownership check; downloads PDF from `vault` bucket; `pdf-parse` extracts text; updates `extracted_text` + `parse_status` (`done`/`no_text`/`failed`); re-embeds with full text via `after()` using `refreshDocumentEmbeddings`; `revalidatePath`; `lib/actions/embeddings.ts`: `chunkText` gets optional `maxChunks` param (default 15); new `refreshDocumentEmbeddings(id, userId, name, extractedText)` — with text: up to 50 chunks of full content; without text: name-only (backwards-compat); `refreshDocumentNameEmbedding` now aliases to `refreshDocumentEmbeddings(…, null)`; `lib/actions/documents.ts`: `addDocument` accepts `parse_status?: 'none' | 'pending'`; `editDocument` SELECTs current `extracted_text` before re-embedding so a rename never wipes PDF content; both use `refreshDocumentEmbeddings`; `DocumentUploadDialog`: PDF path shows "Processing…" step label + hint text; calls `/api/process-pdf`; amber `parseWarning` for `no_text`; red error + keep-open for `failed`; `router.refresh()` after any PDF outcome; `DocumentCard` + `DocumentsView` + documents `page.tsx`: `parse_status` threaded through; card shows "Processing…" / "No text found" / "Parse failed" badges; **manual step required**: run `add_pdf_parsing.sql` in Supabase SQL editor)
+- ✅ Phase 15.A — Multi-Modal Vault Ingestion (`supabase/add_vault_media.sql`: new `vault_media` private Storage bucket — 10 MB limit, accepts `text/plain` + `text/markdown` + `text/x-markdown` + `image/*`; 3 RLS policies path-scoped to user prefix; `app/api/transcribe/route.ts`: auth-gated Whisper endpoint; receives `audio` Blob from FormData; `audioExtension()` maps MIME → file extension; calls `openai.audio.transcriptions.create({ model: 'whisper-1' })`; audio NOT stored; `lib/actions/notes.ts`: `saveTranscriptAsNote(transcript)` server action — auto-titles `Voice Memo — <date>`, inserts Note, fires `after()` embedding refresh; `components/vault/VoiceMemoDialog.tsx`: state machine `idle → requesting → recording → processing → done | error`; browser `MediaRecorder` API; 60s max with progress bar + animated pulsing indicator; onstop collects Blob → POST `/api/transcribe` → `saveTranscriptAsNote` → show transcript preview + "Open in Notes" link; cleanup stops all stream tracks; `components/documents/DocumentUploadDialog.tsx`: `ACCEPTED_TYPES` extended with text MIME types; `bucketForType()` routes `text/*` to `vault_media` at upload + orphan cleanup; `<input accept>` updated to `.pdf,.jpg,.jpeg,.png,.webp,.txt,.md`; `lib/actions/documents.ts`: `deleteDocument` now fetches `file_type` to determine correct bucket for storage removal; `components/command-palette/CommandPalette.tsx`: "Voice Brain Dump" command item with `onOpenVoice` callback; `components/layout/AppShell.tsx`: `voiceOpen` state + `VoiceMemoDialog` mounted globally; **requires**: `OPENAI_API_KEY` in `.env.local`; run `add_vault_media.sql` in Supabase SQL editor)
 - ✅ Phase 13.B — Notes / Docs / Vault Linking (`supabase/add_vault_links.sql`: two junction tables `note_task_links` + `document_task_links` — each with `user_id`, cascade FKs, `UNIQUE(note_id/document_id, task_id)`, and RLS policy; `lib/actions/links.ts`: 4 server actions `linkNoteToTask`, `unlinkNoteFromTask`, `linkDocumentToTask`, `unlinkDocumentFromTask`; `notes/page.tsx` + `documents/page.tsx`: each adds 2 parallel fetches (active tasks + link rows) to existing Promise.all; `NotesView.tsx` + `DocumentsView.tsx`: accept + thread `tasks`/`linkedTaskIds*` props; `NoteEditor.tsx`: "Linked tasks" metadata row below Tags — chips with × unlink + task selector; `DocumentCard.tsx`: linked task chips on card body + "Linked tasks" section in edit dialog with same chip+select pattern; all link/unlink operations are optimistic with server revalidation; backward compatible — existing notes/docs with no links work unchanged; **manual step required**: run `add_vault_links.sql` in Supabase SQL editor)
 
 ---

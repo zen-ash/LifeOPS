@@ -13,7 +13,7 @@ import {
 } from 'cmdk'
 import { Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 
 // ── Root ──────────────────────────────────────────────────────────────────
 const Command = React.forwardRef<
@@ -43,6 +43,7 @@ function CommandDialog({ children, ...props }: CommandDialogProps) {
         max-w-xl — wider than the default dialog for comfortable palette width.
       */}
       <DialogContent className="overflow-hidden p-0 shadow-2xl max-w-xl [&>button:last-child]:hidden">
+        <DialogTitle className="sr-only">Command Palette</DialogTitle>
         <Command>{children}</Command>
       </DialogContent>
     </Dialog>

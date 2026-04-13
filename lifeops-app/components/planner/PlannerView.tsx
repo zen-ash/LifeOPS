@@ -29,8 +29,9 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { savePlan } from '@/lib/actions/planner'
+import { syncPlanToCalendar } from '@/lib/actions/calendarActions'
 import { PLANNER_TEMPLATES, type PlannerTemplate } from '@/lib/templates'
-import type { GeneratedPlan, PlanDay } from '@/types'
+import type { GeneratedPlan, PlanDay, CalendarEvent } from '@/types'
 
 // Phase 13.A: realism types
 interface AtRiskTask {
@@ -51,6 +52,11 @@ interface PlannerViewProps {
   // Phase 13.A: realism signals from server
   availableMinutesPerDay: number
   atRiskTasks: AtRiskTask[]
+  // Phase 14.A: calendar integration — optional so the planner degrades gracefully when not connected
+  calendarEventsByDay?: Record<string, CalendarEvent[]>
+  calendarBusyMinutesByDay?: Record<string, number>
+  // Phase 14.B: whether the user has an active Google Calendar connection (enables Sync button)
+  calendarConnected?: boolean
 }
 
 // Left accent color per day
@@ -80,21 +86,26 @@ function normDay(day: PlanDay) {
   }
 }
 
-// Phase 13.A: compute per-day overload from the current plan
+// Phase 13.A / 14.A: compute per-day overload from the current plan.
 // Uses simple approximation: each task ≈ 30 min, each focus block ≈ 45 min.
+// Phase 14.A: subtracts calendar busy minutes from available time per day so
+// real calendar events reduce the effective capacity the AI plan is measured against.
 function computeOverload(
   plan: GeneratedPlan | null,
-  availableMinutes: number
+  availableMinutes: number,
+  calendarBusyByDay: Record<string, number> = {}
 ): Map<string, DayOverloadInfo> {
   const result = new Map<string, DayOverloadInfo>()
   if (!plan) return result
   for (const day of plan.days) {
     const { tasks, focusBlocks } = normDay(day)
-    const plannedMinutes = tasks.length * 30 + focusBlocks.length * 45
+    const plannedMinutes    = tasks.length * 30 + focusBlocks.length * 45
+    const calendarBusy      = calendarBusyByDay[day.day] ?? 0
+    const effectiveAvailable = Math.max(0, availableMinutes - calendarBusy)
     result.set(day.day, {
       plannedMinutes,
-      availableMinutes,
-      isOverloaded: plannedMinutes > availableMinutes,
+      availableMinutes: effectiveAvailable,
+      isOverloaded:     plannedMinutes > effectiveAvailable,
     })
   }
   return result
@@ -203,6 +214,8 @@ interface DayCardProps {
   onRemoveFocusBlock: (i: number) => void
   // Phase 13.A: overload info for this day
   overloadInfo?: DayOverloadInfo
+  // Phase 14.A: read-only calendar events for this day
+  calendarEvents?: CalendarEvent[]
 }
 
 function DayCard({
@@ -214,6 +227,7 @@ function DayCard({
   onRemoveHabit,
   onRemoveFocusBlock,
   overloadInfo,
+  calendarEvents = [],
 }: DayCardProps) {
   const isWeekend = IS_WEEKEND.has(day.day)
   const { tasks, habits, focusBlocks, rationale } = normDay(day)
@@ -272,6 +286,38 @@ function DayCard({
           </button>
         </div>
       </div>
+
+      {/* Phase 14.A / 14.B: Read-only Google Calendar events — visually distinct from planner items.
+          Phase 14.B: LifeOPS-managed events (is_lifeops_managed=true) are filtered out here;
+          they are already shown in the Focus blocks section and would be duplicate/noisy. */}
+      {calendarEvents.filter((ev) => !ev.is_lifeops_managed).length > 0 && (
+        <div className="px-3 py-2.5 border-b border-border/40 bg-sky-500/[0.04]">
+          <p className="text-[10px] font-semibold text-sky-600 dark:text-sky-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+            <CalendarRange className="h-2.5 w-2.5" />
+            Calendar
+          </p>
+          <ul className="space-y-1">
+            {calendarEvents
+              .filter((ev) => !ev.is_lifeops_managed)
+              .map((ev) => {
+                const startLabel = ev.is_all_day
+                  ? 'All day'
+                  : new Date(ev.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                return (
+                  <li key={ev.id} className="flex items-start gap-1.5">
+                    <span className="w-1 h-1 rounded-full bg-sky-500/60 shrink-0 mt-1.5" />
+                    <span className="text-xs text-sky-700 dark:text-sky-300 leading-snug min-w-0 flex-1">
+                      {ev.title}
+                      <span className="ml-1 text-[10px] text-sky-600/60 dark:text-sky-400/60 font-medium">
+                        {startLabel}
+                      </span>
+                    </span>
+                  </li>
+                )
+              })}
+          </ul>
+        </div>
+      )}
 
       {/* Focus blocks */}
       {focusBlocks.length > 0 && (
@@ -505,6 +551,9 @@ export function PlannerView({
   savedPlan,
   availableMinutesPerDay,
   atRiskTasks,
+  calendarEventsByDay = {},
+  calendarBusyMinutesByDay = {},
+  calendarConnected = false,
 }: PlannerViewProps) {
   const [plan, setPlan] = useState<GeneratedPlan | null>(savedPlan)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -517,11 +566,16 @@ export function PlannerView({
   const [isRebuildingWeek, setIsRebuildingWeek] = useState(false)
   // Phase 12.B: selected template — persists across regenerations in this session
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
+  // Phase 14.B: calendar sync state
+  const [isSyncing, startSyncing] = useTransition()
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'synced' | 'error'>('idle')
+  const [syncError, setSyncError] = useState<string | null>(null)
 
-  // Phase 13.A: per-day overload map, recomputed whenever the plan changes
+  // Phase 13.A / 14.A: per-day overload map — recomputed when plan or calendar data changes.
+  // calendarBusyMinutesByDay reduces effective available minutes per day.
   const overloadMap = useMemo(
-    () => computeOverload(plan, availableMinutesPerDay),
-    [plan, availableMinutesPerDay]
+    () => computeOverload(plan, availableMinutesPerDay, calendarBusyMinutesByDay),
+    [plan, availableMinutesPerDay, calendarBusyMinutesByDay]
   )
   const overloadedDays = useMemo(
     () =>
@@ -539,6 +593,9 @@ export function PlannerView({
   function markDirty() {
     setIsSaved(false)
     setSaveStatus('idle')
+    // Phase 14.B: plan changed — previous sync is now stale
+    setSyncStatus('idle')
+    setSyncError(null)
   }
 
   // ── Full week generate (existing flow) ────────────────────────────────
@@ -732,6 +789,23 @@ export function PlannerView({
     })
   }
 
+  // ── Phase 14.B: Sync focus blocks to Google Calendar ──────────────────
+  // Pushes each focus block in the plan to Google Calendar as a timed event,
+  // patches existing synced events, and removes stale ones (blocks removed from plan).
+  function handleSyncToCalendar() {
+    if (!plan) return
+    setSyncError(null)
+    startSyncing(async () => {
+      const result = await syncPlanToCalendar(weekStart, plan)
+      if (result.error) {
+        setSyncStatus('error')
+        setSyncError(result.error)
+      } else {
+        setSyncStatus('synced')
+      }
+    })
+  }
+
   // ── Determine whether "Rebuild rest of week" should be shown ──────────
   // Show only when there's an existing plan and it's not already Sunday.
   const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' })
@@ -840,11 +914,49 @@ export function PlannerView({
             </Button>
           )}
 
+          {/* Phase 14.B: Sync focus blocks to Google Calendar */}
+          {calendarConnected && plan && (
+            <Button
+              onClick={handleSyncToCalendar}
+              disabled={isSyncing || isGenerating || isAnyRebuildRunning}
+              variant="outline"
+              size="sm"
+              className={cn(
+                'gap-1.5',
+                syncStatus === 'synced' && 'border-sky-500/40 text-sky-600 dark:text-sky-400 bg-sky-500/5 hover:bg-sky-500/10'
+              )}
+              title="Push focus blocks to Google Calendar (9 AM UTC · drag to adjust)"
+            >
+              {isSyncing ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Syncing…
+                </>
+              ) : syncStatus === 'synced' ? (
+                <>
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Synced to Calendar
+                </>
+              ) : (
+                <>
+                  <CalendarRange className="h-3.5 w-3.5" />
+                  Sync to Calendar
+                </>
+              )}
+            </Button>
+          )}
+
           {/* Status messages */}
           {saveStatus === 'error' && (
             <p className="text-sm text-destructive flex items-center gap-1.5">
               <AlertCircle className="h-4 w-4 shrink-0" />
               Failed to save — please try again
+            </p>
+          )}
+          {syncStatus === 'error' && syncError && (
+            <p className="text-xs text-destructive flex items-center gap-1.5">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              {syncError}
             </p>
           )}
           {plan && !isSaved && saveStatus === 'idle' && !isGenerating && !isAnyRebuildRunning && (
@@ -968,6 +1080,7 @@ export function PlannerView({
                 onRemoveHabit={(idx) => removeFromDay(day.day, 'habits', idx)}
                 onRemoveFocusBlock={(idx) => removeFromDay(day.day, 'focus_blocks', idx)}
                 overloadInfo={overloadMap.get(day.day)}
+                calendarEvents={calendarEventsByDay[day.day]}
               />
             ))}
           </div>
@@ -986,6 +1099,7 @@ export function PlannerView({
                   onRemoveHabit={(idx) => removeFromDay(day.day, 'habits', idx)}
                   onRemoveFocusBlock={(idx) => removeFromDay(day.day, 'focus_blocks', idx)}
                   overloadInfo={overloadMap.get(day.day)}
+                  calendarEvents={calendarEventsByDay[day.day]}
                 />
               ))}
               {weekendCards.length < 2 && <div className="hidden xl:block" />}

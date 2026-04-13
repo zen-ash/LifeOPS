@@ -5,6 +5,9 @@ import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { CommandPalette } from '@/components/command-palette/CommandPalette'
 import { FeedbackDialog } from '@/components/feedback/FeedbackDialog'
+import { VaultDialog } from '@/components/vault/VaultDialog'
+import { VoiceMemoDialog } from '@/components/vault/VoiceMemoDialog'
+import { CopilotDialog } from '@/components/command-palette/CopilotDialog'
 
 interface AppShellProps {
   profile: {
@@ -21,6 +24,12 @@ export function AppShell({ profile, children }: AppShellProps) {
   const [palOpen, setPalOpen] = useState(false)
   // Phase 12.C: feedback dialog open state — shared between Sidebar trigger and CommandPalette
   const [feedbackOpen, setFeedbackOpen] = useState(false)
+  // Phase 13.C: vault Q&A dialog open state — triggered from CommandPalette
+  const [vaultOpen, setVaultOpen] = useState(false)
+  // Phase 15.A: voice brain dump dialog open state
+  const [voiceOpen, setVoiceOpen] = useState(false)
+  // Phase 15.C: co-pilot NL command dialog open state
+  const [copilotOpen, setCopilotOpen] = useState(false)
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -51,10 +60,26 @@ export function AppShell({ profile, children }: AppShellProps) {
       </div>
 
       {/* Phase 12.A: global command palette — mounted once in the shell */}
-      <CommandPalette open={palOpen} onOpenChange={setPalOpen} onOpenFeedback={() => setFeedbackOpen(true)} />
+      <CommandPalette
+        open={palOpen}
+        onOpenChange={setPalOpen}
+        onOpenFeedback={() => setFeedbackOpen(true)}
+        onOpenVault={() => setVaultOpen(true)}
+        onOpenVoice={() => setVoiceOpen(true)}
+        onOpenCopilot={() => setCopilotOpen(true)}
+      />
 
       {/* Phase 12.C: global feedback dialog — shared between sidebar trigger and command palette */}
       <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
+
+      {/* Phase 13.C: vault Q&A dialog — triggered from command palette */}
+      <VaultDialog open={vaultOpen} onOpenChange={setVaultOpen} />
+
+      {/* Phase 15.A: voice brain dump dialog — triggered from command palette */}
+      <VoiceMemoDialog open={voiceOpen} onOpenChange={setVoiceOpen} />
+
+      {/* Phase 15.C: co-pilot NL command dialog — triggered from command palette */}
+      <CopilotDialog open={copilotOpen} onOpenChange={setCopilotOpen} />
     </div>
   )
 }

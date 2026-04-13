@@ -11,6 +11,7 @@ type DocRow = {
   file_type: string | null
   file_size: number | null
   project_id: string | null
+  parse_status: string
   created_at: string
   projects: { name: string } | null
 }
@@ -41,7 +42,7 @@ export default async function DocumentsPage() {
   ] = await Promise.all([
     supabase
       .from('documents')
-      .select('id, name, file_path, file_type, file_size, project_id, created_at, projects(name)')
+      .select('id, name, file_path, file_type, file_size, project_id, parse_status, created_at, projects(name)')
       .eq('user_id', user!.id)
       .order('created_at', { ascending: false }),
     supabase
@@ -96,6 +97,7 @@ export default async function DocumentsPage() {
     file_type: d.file_type,
     file_size: d.file_size,
     project_id: d.project_id,
+    parse_status: (d.parse_status ?? 'none') as 'none' | 'pending' | 'done' | 'no_text' | 'failed',
     project_name: d.projects?.name ?? null,
     created_at: d.created_at,
   }))

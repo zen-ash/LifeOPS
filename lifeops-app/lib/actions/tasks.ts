@@ -167,6 +167,68 @@ export async function carryToTomorrow(taskId: string) {
   return { success: true }
 }
 
+// Phase 15.C: object-based task creation for the Co-Pilot confirm flow.
+// addTask takes FormData and is designed for the form UI — unsuitable for
+// programmatic use. This accepts a plain object and shares the same DB insert.
+export async function createTaskDirect(data: {
+  title: string
+  priority: 'low' | 'medium' | 'high' | 'urgent'
+  due_date: string | null
+  estimated_minutes: number | null
+}) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  if (!data.title?.trim()) return { error: 'Task title is required' }
+  if (!(['low', 'medium', 'high', 'urgent'] as const).includes(data.priority)) {
+    return { error: 'Invalid priority' }
+  }
+
+  const { data: inserted, error } = await supabase
+    .from('tasks')
+    .insert({
+      user_id: user.id,
+      title: data.title.trim(),
+      priority: data.priority,
+      due_date: data.due_date || null,
+      estimated_minutes: data.estimated_minutes || null,
+    })
+    .select('id')
+    .single()
+
+  if (error) return { error: error.message }
+
+  revalidateTaskPaths()
+  return { success: true, taskId: inserted.id as string }
+}
+
+// Phase 15.C: batch reschedule for the Co-Pilot confirm flow.
+// Single UPDATE ... WHERE id IN (...) instead of N sequential rescheduleTask calls.
+// RLS ensures only the authenticated user's tasks are affected.
+export async function rescheduleMultipleTasks(taskIds: string[], newDate: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  if (!taskIds.length) return { error: 'No tasks specified' }
+
+  const { error } = await supabase
+    .from('tasks')
+    .update({ due_date: newDate || null })
+    .in('id', taskIds)
+    .eq('user_id', user.id)
+
+  if (error) return { error: error.message }
+
+  revalidateTaskPaths()
+  return { success: true }
+}
+
 export async function toggleTaskStatus(taskId: string, currentStatus: string) {
   const supabase = await createClient()
   const {

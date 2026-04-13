@@ -71,6 +71,9 @@ export interface Document {
   file_path: string
   file_type: string | null
   file_size: number | null
+  // Phase 15.B: PDF parsing
+  extracted_text: string | null
+  parse_status: 'none' | 'pending' | 'done' | 'no_text' | 'failed'
   created_at: string
   updated_at: string
 }
@@ -337,4 +340,17 @@ export interface WeeklyPlan {
   plan_json: GeneratedPlan
   created_at: string
   updated_at: string
+}
+
+// Phase 14.A / 14.B: Calendar Integration
+// Mirrors the calendar_events DB row returned to the planner (no tokens).
+export interface CalendarEvent {
+  id:                 string
+  title:              string
+  start_time:         string   // ISO 8601 UTC e.g. "2024-01-15T09:00:00Z"
+  end_time:           string   // ISO 8601 UTC
+  is_all_day:         boolean
+  // Phase 14.B: true when this event was pushed by LifeOPS (extendedProperties.private.lifeops_managed = "true").
+  // Excludes the event from busyCalendarMinutes to prevent double-counting synced work blocks.
+  is_lifeops_managed: boolean
 }

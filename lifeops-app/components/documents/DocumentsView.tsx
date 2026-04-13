@@ -16,6 +16,8 @@ interface DocRow {
   file_size: number | null
   project_id: string | null
   project_name: string | null
+  // Phase 15.B
+  parse_status: 'none' | 'pending' | 'done' | 'no_text' | 'failed'
   created_at: string
 }
 
