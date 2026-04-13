@@ -209,8 +209,7 @@ async function createGoogleEvent(
 }
 
 async function insertMapping(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase:        any,
+  supabase:        Awaited<ReturnType<typeof createClient>>,
   userId:          string,
   weekStart:       string,
   dayName:         string,
