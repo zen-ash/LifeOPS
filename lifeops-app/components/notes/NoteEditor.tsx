@@ -20,8 +20,8 @@ interface NoteForEdit {
 
 interface Project { id: string; name: string }
 
-// Phase 13.B
-interface TaskOption { id: string; title: string }
+// Phase 13.B — project_id added in Phase 16.B so the picker can be scoped to the note's project
+interface TaskOption { id: string; title: string; project_id: string | null }
 
 interface NoteEditorProps {
   type: 'note' | 'journal'
@@ -57,24 +57,28 @@ export function NoteEditor({ type, note, noteTags, projects, onDeleted, onBack, 
     if (!title.trim()) return
     setSaving(true)
     setError(null)
-    const fd = new FormData()
-    fd.append('title', title.trim())
-    fd.append('content', content)
-    fd.append('type', type)
-    if (type === 'note') {
-      if (projectId) fd.append('project_id', projectId)
-      fd.append('is_pinned', String(isPinned))
-    }
-    const result = await editNote(note.id, fd)
-    if (result?.error) {
-      setError(result.error)
+    try {
+      const fd = new FormData()
+      fd.append('title', title.trim())
+      fd.append('content', content)
+      fd.append('type', type)
+      if (type === 'note') {
+        if (projectId) fd.append('project_id', projectId)
+        fd.append('is_pinned', String(isPinned))
+      }
+      const result = await editNote(note.id, fd)
+      if (result?.error) {
+        setError(result.error)
+        return
+      }
+      await setNoteTags(note.id, tagNames)
+      setSavedFlash(true)
+      setTimeout(() => setSavedFlash(false), 2000)
+    } catch {
+      setError('Failed to save. Please try again.')
+    } finally {
       setSaving(false)
-      return
     }
-    await setNoteTags(note.id, tagNames)
-    setSaving(false)
-    setSavedFlash(true)
-    setTimeout(() => setSavedFlash(false), 2000)
   }
 
   async function handleDelete() {
@@ -106,8 +110,14 @@ export function NoteEditor({ type, note, noteTags, projects, onDeleted, onBack, 
     await unlinkNoteFromTask(note.id, taskId)
   }
 
-  // Tasks not yet linked — shown in the selector
-  const unlinkableTasks = tasks.filter(t => !localLinkedIds.includes(t.id))
+  // Phase 16.B: scope the picker to the note's currently selected project.
+  // Already-linked tasks always remain visible — we only restrict what can be newly linked.
+  // If no project is selected, all active tasks are available.
+  const unlinkableTasks = tasks.filter((t) => {
+    if (localLinkedIds.includes(t.id)) return false
+    if (!projectId) return true
+    return t.project_id === projectId
+  })
 
   // Linked tasks with titles resolved from the tasks list
   const linkedTasks = localLinkedIds
@@ -161,7 +171,11 @@ export function NoteEditor({ type, note, noteTags, projects, onDeleted, onBack, 
               <span className="text-[11px] text-muted-foreground/60 w-14 shrink-0">Project</span>
               <select
                 value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
+                onChange={(e) => {
+                  setProjectId(e.target.value)
+                  // Clear the pending task selection when project changes so the picker resets
+                  setPickTaskId('')
+                }}
                 className="flex-1 h-7 rounded-lg border border-input bg-background px-2 text-xs text-muted-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 <option value="">None</option>
@@ -187,7 +201,7 @@ export function NoteEditor({ type, note, noteTags, projects, onDeleted, onBack, 
                 Tasks
               </span>
               <div className="flex-1 flex flex-col gap-1.5">
-                {/* Linked task chips */}
+                {/* Linked task chips — always shown regardless of current project selection */}
                 {linkedTasks.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {linkedTasks.map(task => (
@@ -209,7 +223,7 @@ export function NoteEditor({ type, note, noteTags, projects, onDeleted, onBack, 
                   </div>
                 )}
 
-                {/* Link selector — only show when there are tasks left to link */}
+                {/* Link selector — scoped to selected project; hidden when picker is empty */}
                 {unlinkableTasks.length > 0 && (
                   <div className="flex items-center gap-1.5">
                     <select
@@ -236,6 +250,13 @@ export function NoteEditor({ type, note, noteTags, projects, onDeleted, onBack, 
                       Link
                     </button>
                   </div>
+                )}
+
+                {/* Contextual hint when a project is selected but has no available tasks */}
+                {projectId && unlinkableTasks.length === 0 && linkedTasks.length === 0 && (
+                  <p className="text-[10px] text-muted-foreground/50 italic">
+                    No active tasks in this project.
+                  </p>
                 )}
               </div>
             </div>

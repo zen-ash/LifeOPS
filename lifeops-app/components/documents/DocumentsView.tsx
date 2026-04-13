@@ -23,8 +23,8 @@ interface DocRow {
 
 interface Project { id: string; name: string }
 
-// Phase 13.B
-interface TaskOption { id: string; title: string }
+// Phase 13.B — project_id added in Phase 16.B so DocumentCard can scope the task picker
+interface TaskOption { id: string; title: string; project_id: string | null }
 
 type FileTypeFilter = 'all' | 'pdf' | 'image'
 

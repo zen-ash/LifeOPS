@@ -62,10 +62,11 @@ export default async function NotesPage() {
       .eq('user_id', user!.id)
       .eq('entity_type', 'notes')
       .order('created_at', { ascending: true }),
-    // Phase 13.B: active tasks for link selector
+    // Phase 13.B: active tasks for link selector.
+    // project_id included so the NoteEditor can scope the picker to the note's project.
     supabase
       .from('tasks')
-      .select('id, title')
+      .select('id, title, project_id')
       .eq('user_id', user!.id)
       .in('status', ['todo', 'in_progress'])
       .order('title'),
@@ -76,10 +77,16 @@ export default async function NotesPage() {
       .eq('user_id', user!.id),
   ])
 
-  // Build note_id → Tag[] lookup
+  // Only include tags whose note_id belongs to a type='note' entry.
+  // Without this guard the filter bar shows tags from journal entries too,
+  // since note_tags covers both type='note' and type='journal' rows.
+  const noteIds = new Set(
+    (rawNotes as NoteRow[] | null ?? []).map((n) => n.id)
+  )
+
   const tagsByNoteId: Record<string, Tag[]> = {}
   for (const row of (rawNoteTags as NoteTagRow[] | null) ?? []) {
-    if (!row.tags) continue
+    if (!row.tags || !noteIds.has(row.note_id)) continue
     if (!tagsByNoteId[row.note_id]) tagsByNoteId[row.note_id] = []
     tagsByNoteId[row.note_id].push(row.tags as Tag)
   }
@@ -103,10 +110,11 @@ export default async function NotesPage() {
     updated_at: n.updated_at,
   }))
 
-  const tasks = (rawTasks ?? []) as { id: string; title: string }[]
+  // project_id flows through so NoteEditor can filter the task picker by the note's project
+  const tasks = (rawTasks ?? []) as { id: string; title: string; project_id: string | null }[]
 
-  const noteCount = notes.length
-  const pinnedCount = notes.filter(n => n.is_pinned).length
+  const noteCount    = notes.length
+  const pinnedCount  = notes.filter(n => n.is_pinned).length
 
   return (
     <div className="max-w-5xl mx-auto space-y-5">

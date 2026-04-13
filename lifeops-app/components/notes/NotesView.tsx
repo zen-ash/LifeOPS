@@ -24,7 +24,8 @@ interface NoteRow {
 
 interface Project { id: string; name: string }
 
-interface TaskOption { id: string; title: string }
+// Phase 13.B — project_id added in Phase 16.B so NoteEditor can scope the task picker
+interface TaskOption { id: string; title: string; project_id: string | null }
 
 interface NotesViewProps {
   notes: NoteRow[]

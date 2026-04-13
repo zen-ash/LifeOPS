@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Pencil, Trash2, ArrowRight, Zap } from 'lucide-react'
-import { deleteTask, toggleTaskStatus, carryToTomorrow } from '@/lib/actions/tasks'
+import { Pencil, Trash2, ArrowRight, Zap, Ban } from 'lucide-react'
+import { deleteTask, toggleTaskStatus, carryToTomorrow, cancelTask } from '@/lib/actions/tasks'
 import { EditTaskDialog } from './EditTaskDialog'
 import { TagBadge } from '@/components/ui/tag-input'
 import { cn } from '@/lib/utils'
@@ -32,18 +32,15 @@ const PRIORITY_BAR: Record<string, string> = {
 }
 
 // ── Urgency model — Phase 11.E ─────────────────────────────────────────────
-// Computed purely from existing task fields; no DB or trigger required.
 type UrgencyLevel = 'overdue' | 'due_today' | 'due_soon' | 'at_risk' | 'normal'
 
 function getUrgencyLevel(task: TaskWithProject): UrgencyLevel {
   if (task.status === 'done' || task.status === 'cancelled') return 'normal'
 
   if (!task.due_date) {
-    // Undated urgent tasks are operationally at-risk — no deadline, but maximal priority
     return task.priority === 'urgent' ? 'at_risk' : 'normal'
   }
 
-  // Parse as local date — due dates are day-level, not timestamps
   const [y, m, d] = task.due_date.split('-').map(Number)
   const due = new Date(y, m - 1, d)
   const today = new Date()
@@ -73,15 +70,18 @@ function formatDueDate(dateStr: string): string {
 }
 
 export function TaskRow({ task, projects, taskTags }: TaskRowProps) {
-  const [pending, setPending] = useState(false)
-  const [carrying, setCarrying] = useState(false)
-  const [editOpen, setEditOpen] = useState(false)
+  const [pending,    setPending]    = useState(false)
+  const [carrying,   setCarrying]   = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [editOpen,   setEditOpen]   = useState(false)
 
-  const isDone = task.status === 'done'
-  const urgency = getUrgencyLevel(task)
-  const showCarry = urgency === 'overdue' || urgency === 'due_today'
+  const isDone      = task.status === 'done'
+  const isCancelled = task.status === 'cancelled'
+  const urgency     = getUrgencyLevel(task)
+  const showCarry   = urgency === 'overdue' || urgency === 'due_today'
 
   async function handleToggle() {
+    if (isCancelled) return  // cancelled tasks reopen via edit dialog
     setPending(true)
     await toggleTaskStatus(task.id, task.status)
     setPending(false)
@@ -98,7 +98,13 @@ export function TaskRow({ task, projects, taskTags }: TaskRowProps) {
     setCarrying(false)
   }
 
-  // Due date chip styling — stronger for overdue/today
+  async function handleCancel() {
+    if (!confirm(`Cancel "${task.title}"? It will move to the Canceled section.`)) return
+    setCancelling(true)
+    await cancelTask(task.id)
+    setCancelling(false)
+  }
+
   const dueDateChipClass =
     urgency === 'overdue'
       ? 'bg-destructive/10 text-destructive border border-destructive/20 font-semibold'
@@ -108,9 +114,8 @@ export function TaskRow({ task, projects, taskTags }: TaskRowProps) {
       ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20'
       : 'bg-muted text-muted-foreground border border-border/40'
 
-  // Row background tint for overdue tasks — subtle signal without redesign
   const rowBgClass =
-    urgency === 'overdue' && !isDone
+    urgency === 'overdue' && !isDone && !isCancelled
       ? 'bg-destructive/[0.02] hover:bg-destructive/[0.05]'
       : 'hover:bg-accent/30'
 
@@ -121,29 +126,31 @@ export function TaskRow({ task, projects, taskTags }: TaskRowProps) {
           'group flex items-center gap-3 pl-3 pr-2 py-3 border-b last:border-b-0',
           'transition-colors',
           rowBgClass,
-          isDone && 'opacity-50'
+          (isDone || isCancelled) && 'opacity-50'
         )}
       >
         {/* Priority bar */}
         <div
           className={cn(
             'w-0.5 self-stretch rounded-full shrink-0',
-            isDone ? 'bg-muted-foreground/20' : PRIORITY_BAR[task.priority]
+            (isDone || isCancelled) ? 'bg-muted-foreground/20' : PRIORITY_BAR[task.priority]
           )}
         />
 
-        {/* Checkbox */}
+        {/* Checkbox — disabled for cancelled tasks */}
         <button
           type="button"
           onClick={handleToggle}
-          disabled={pending}
-          aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
+          disabled={pending || isCancelled}
+          aria-label={isDone ? 'Mark incomplete' : isCancelled ? 'Canceled' : 'Mark complete'}
           className={cn(
             'h-5 w-5 shrink-0 rounded-[5px] border-2 flex items-center justify-center',
-            'transition-all duration-200 cursor-pointer',
+            'transition-all duration-200',
             isDone
-              ? 'bg-primary border-primary'
-              : 'border-muted-foreground/30 hover:border-primary/70 hover:bg-primary/5'
+              ? 'bg-primary border-primary cursor-pointer'
+              : isCancelled
+              ? 'bg-muted/50 border-muted-foreground/20 cursor-default'
+              : 'border-muted-foreground/30 hover:border-primary/70 hover:bg-primary/5 cursor-pointer'
           )}
         >
           {isDone && (
@@ -157,20 +164,24 @@ export function TaskRow({ task, projects, taskTags }: TaskRowProps) {
               />
             </svg>
           )}
+          {isCancelled && (
+            <svg className="h-2.5 w-2.5 text-muted-foreground/40" viewBox="0 0 10 10" fill="none">
+              <path d="M2 5h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          )}
         </button>
 
-        {/* Title + description + tags + at-risk badge */}
+        {/* Title + description + tags + badges */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
             <p
               className={cn(
                 'text-sm font-medium leading-snug truncate',
-                isDone && 'line-through text-muted-foreground/60'
+                (isDone || isCancelled) && 'line-through text-muted-foreground/60'
               )}
             >
               {task.title}
             </p>
-            {/* At-risk badge: urgent priority with no due date */}
             {urgency === 'at_risk' && (
               <span className="inline-flex items-center gap-0.5 shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">
                 <Zap className="h-2.5 w-2.5" />
@@ -192,7 +203,7 @@ export function TaskRow({ task, projects, taskTags }: TaskRowProps) {
 
         {/* Meta: due date chip + project */}
         <div className="flex items-center gap-2 shrink-0">
-          {task.due_date && !isDone && (
+          {task.due_date && !isDone && !isCancelled && (
             <span className={cn('text-[11px] px-1.5 py-0.5 rounded', dueDateChipClass)}>
               {formatDueDate(task.due_date)}
             </span>
@@ -211,8 +222,8 @@ export function TaskRow({ task, projects, taskTags }: TaskRowProps) {
 
         {/* Action buttons — visible on hover */}
         <div className="flex gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          {/* Carry to tomorrow — only for overdue and due-today tasks */}
-          {showCarry && !isDone && (
+          {/* Carry to tomorrow — only for overdue/today active tasks */}
+          {showCarry && !isDone && !isCancelled && (
             <Button
               variant="ghost"
               size="icon"
@@ -223,6 +234,21 @@ export function TaskRow({ task, projects, taskTags }: TaskRowProps) {
               title="Carry to tomorrow"
             >
               <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          )}
+
+          {/* Cancel — only for active tasks */}
+          {!isDone && !isCancelled && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-orange-600 hover:bg-orange-500/10"
+              onClick={handleCancel}
+              disabled={cancelling}
+              aria-label="Cancel task"
+              title="Cancel task"
+            >
+              <Ban className="h-3.5 w-3.5" />
             </Button>
           )}
 

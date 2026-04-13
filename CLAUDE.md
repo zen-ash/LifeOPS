@@ -8,7 +8,7 @@ The core promise: turn goals into a realistic week, execute it, and recover when
 
 The app must feel like one connected loop, not a collection of unrelated pages. Every new feature should strengthen that loop. Features that do not strengthen the loop are noise.
 
-All phases through 10D.1 are complete. The app is functionally finished and UI/UX launch-ready.
+All phases through 16.C are complete. The app is functionally finished and UI/UX launch-ready.
 It is treated as a serious personal product / flagship portfolio project.
 Further work focuses on product behavior, retention loops, intelligence, and premium additions — NOT large visual redesigns.
 
@@ -97,6 +97,19 @@ Soft Eng Proj/
 - Do not build calendar sync before planner logic is stable
 - Do not attempt full offline-first sync early
 
+## Phase 16 — Refinement Sprint Ordering Principle
+
+**Data model first → Data cleanliness second → Operational UX third → Internal tooling last**
+
+This is the non-negotiable sequencing rule for all Phase 16 work. Phases 16.A (data model), 16.B (data cleanliness), and 16.C (operational UX) are complete. Phase 16.D is the current target.
+
+### Phase 16 Guardrails
+
+**Phase 16.D — AI Workspace & UX Safety:**
+- Chat persistence must remain **simple and linear** — one conversation thread per user per session context
+- Do not over-engineer branching conversation trees, thread management, or complex chat-history systems in this phase
+- The AI Assistant conversion to a global side panel must not break existing `/assistant` functionality or cause layout regressions on any page
+
 ## Phase Roadmap
 - ✅ Phase 1 — Auth + dashboard + base project CRUD
 - ✅ Phase 2A — Onboarding wizard
@@ -130,14 +143,18 @@ Soft Eng Proj/
 - ✅ Phase 12.A — Command Palette (Cmd+K / Ctrl+K; cmdk-based; Navigation + Actions + Review & Recovery groups; ⌘K hint button in Header; open state in AppShell)
 - ✅ Phase 12.B — Templates (6 static templates in lib/templates.ts; template picker in PlannerEmptyState; planning_emphasis injected into AI system prompt; active template badge in action bar; templateId persists across rebuilds)
 - ✅ Phase 12.C — Feedback Widget (user_feedback table; submitFeedback server action; FeedbackDialog with category pills + textarea + inline success; sidebar trigger; Submit Feedback in command palette)
-- ✅ Phase 12.D — Activity Heatmap (GitHub-style 17-week grid; task_completed/focus_session_completed/habit_checked events; server-side UTC aggregation; 4-level color scale; native title tooltip; dashboard placement)
+- ✅ Phase 12.D — Activity Heatmap (GitHub-style 52-week grid; task_completed/focus_session_completed/habit_checked events; server-side UTC aggregation; 4-level color scale; native title tooltip; dashboard placement)
 - ✅ Phase 12.E — Habits Intelligence (habit_skip_logs table; skipHabit/unskipHabit server actions; Skip button + amber strip in HabitCard; 14-day consistency + trend arrow; habits section in Daily Shutdown with optimistic Complete/Skip; skippedCount in WeeklyMetrics; enriched AI review prompt)
 - ✅ Phase 13.A — Workload Realism + Auto-Replanning (per-day overload detection from study_hours_per_week; deadline-risk tasks within 3 days; amber risk/overload banner with "Repair Rest of Week"; "Full" badge per overloaded day card; repairContext injected into rebuild API calls; deferredTasks in plan schema + UI section)
 - ✅ Phase 13.B — Notes / Docs / Vault Linking (note_task_links + document_task_links junction tables; RLS; link/unlink server actions; linked task chips in NoteEditor metadata + DocumentCard edit dialog; linked task display on document cards)
 - ✅ Phase 13.C — Chat with Your Vault (pgvector; vault_embeddings table; match_embeddings SECURITY DEFINER RPC; paragraph-based chunking; embedMany batch embedding; after() post-save refresh in notes + documents; /api/vault RAG endpoint; VaultDialog Q&A UI; "Ask Second Brain" in CommandPalette)
 - ✅ Phase 14.A — Calendar Integration Foundation (Google OAuth 2.0; calendar_connections + calendar_events tables; server-side token refresh; syncCalendarEvents on planner load; read-only sky-blue event blocks in DayCard; calendarBusyMinutesByDay reduces effective available time in computeOverload; CalendarConnectBanner in planner header; /api/calendar/connect + /callback route handlers; disconnect server action)
-- ✅ Phase 14.B — Two-Way Calendar Sync (push focus blocks to Google Calendar; calendar_sync_mappings table; [LifeOPS] title prefix + extendedProperties.private.lifeops_managed for ownership; create/patch/delete LifeOPS-managed events only; double-count prevention via is_lifeops_managed column; scope upgraded to calendar.events; "Sync to Calendar" button in planner action bar; stale mapping cleanup on sync; disconnect clears mappings)
+- ✅ Phase 14.B — Two-Way Calendar Sync (push focus blocks to Google Calendar; calendar_sync_mappings table; [LifeOPS] title prefix + extendedProperties.private.lifeops_managed for ownership; create/patch/delete LifeOPS-managed events only; double-count prevention via is_lifeops_managed column; OAuth scope is full https://www.googleapis.com/auth/calendar; "Sync to Calendar" button in planner action bar; stale mapping cleanup on sync; disconnect clears mappings)
 - ✅ Phase 15.A — Multi-Modal Vault Ingestion (vault_media private Storage bucket for txt/md; Voice Brain Dump: MediaRecorder → /api/transcribe Whisper endpoint → saveTranscriptAsNote → Phase 13.C embeddings; DocumentUploadDialog extended for txt/md with dual-bucket routing; "Voice Brain Dump" in CommandPalette; VoiceMemoDialog mounted in AppShell)
 - ✅ Phase 15.B — Advanced Document Parsing / PDF Ingestion (pdf-parse + serverExternalPackages; extracted_text + parse_status columns on documents; /api/process-pdf route; refreshDocumentEmbeddings with 50-chunk limit; DocumentUploadDialog "Processing…" state + parse result messaging; DocumentCard parse status badges)
 - ✅ Phase 15.C — Co-Pilot Command Line (natural-language command entry in ⌘K palette; /api/copilot parse-only route using OpenAI tool calling; create_task + reschedule_tasks tool schemas; client-side date/timezone injection; 3-step Parse→Preview→Execute flow; CopilotDialog; createTaskDirect + rescheduleMultipleTasks server actions; no destructive tools)
-- 🔜 Phase 15.D — (next phase TBD)
+- ✅ Phase 16.A — Project-Centric Organization (project_tags join table; inline status dropdown on ProjectCard; status tabs Active/Completed/Archived/All on /projects; TagFilterBar for project tags; ProjectHubPanel lazy slide-over shows linked tasks/documents/notes; getProjectHubData server action; existing project_id FKs on tasks/notes/documents treated as stable relational foundation; no destructive migrations)
+- ✅ Phase 16.B — Data Cleanliness (Notes/Journal tag separation at server-processing layer — no schema changes; project-scoped task linking in DocumentCard, NoteEditor, and journal; handleSave wrapped in try/finally to prevent stuck saving state; backward-compatible: existing cross-project links remain visible)
+- ✅ Phase 16.C — Task Lifecycle Upgrade (cancelTask server action; Ban-icon cancel button on TaskRow; dedicated Canceled tab + grouped Canceled section in TasksView; priority-first sorting (urgent→high→medium→low then due date) within every group and flat list; cancelled tasks visually distinct — strikethrough, muted, dash checkbox; reopen via Edit dialog; no schema migration needed — cancelled already in DB constraint; system-wide audit confirmed all consumers correctly exclude cancelled)
+- 🔜 Phase 16.D — AI Workspace & UX Safety ← **next implementation target**
+- 🔜 Phase 16.E — Admin View

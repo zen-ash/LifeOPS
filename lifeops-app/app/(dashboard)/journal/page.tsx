@@ -43,10 +43,16 @@ export default async function JournalPage() {
       .order('created_at', { ascending: true }),
   ])
 
-  // Build note_id → Tag[] lookup (revalidatePath covers both note types so we get all)
+  // Only include tags whose note_id belongs to a journal entry.
+  // Without this guard the filter bar shows tags from regular notes too,
+  // since note_tags covers both type='note' and type='journal' rows.
+  const journalIds = new Set(
+    (rawEntries as JournalRow[] | null ?? []).map((e) => e.id)
+  )
+
   const tagsByNoteId: Record<string, Tag[]> = {}
   for (const row of (rawNoteTags as NoteTagRow[] | null) ?? []) {
-    if (!row.tags) continue
+    if (!row.tags || !journalIds.has(row.note_id)) continue
     if (!tagsByNoteId[row.note_id]) tagsByNoteId[row.note_id] = []
     tagsByNoteId[row.note_id].push(row.tags as Tag)
   }
@@ -78,7 +84,7 @@ export default async function JournalPage() {
         projects={[]}
         tagsByNoteId={tagsByNoteId}
         savedViews={(rawSavedViews as SavedView[] | null) ?? []}
-        tasks={[]}
+        tasks={[] as { id: string; title: string; project_id: string | null }[]}
         linkedTaskIdsByNoteId={{}}
       />
     </div>

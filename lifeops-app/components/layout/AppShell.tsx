@@ -8,6 +8,7 @@ import { FeedbackDialog } from '@/components/feedback/FeedbackDialog'
 import { VaultDialog } from '@/components/vault/VaultDialog'
 import { VoiceMemoDialog } from '@/components/vault/VoiceMemoDialog'
 import { CopilotDialog } from '@/components/command-palette/CopilotDialog'
+import { AiSidePanel } from '@/components/assistant/AiSidePanel'
 
 interface AppShellProps {
   profile: {
@@ -30,6 +31,8 @@ export function AppShell({ profile, children }: AppShellProps) {
   const [voiceOpen, setVoiceOpen] = useState(false)
   // Phase 15.C: co-pilot NL command dialog open state
   const [copilotOpen, setCopilotOpen] = useState(false)
+  // Phase 16.D: global AI side panel
+  const [aiOpen, setAiOpen] = useState(false)
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -46,6 +49,7 @@ export function AppShell({ profile, children }: AppShellProps) {
         mobileOpen={mobileOpen}
         onClose={() => setMobileOpen(false)}
         onOpenFeedback={() => setFeedbackOpen(true)}
+        onOpenAI={() => setAiOpen(true)}
       />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
@@ -53,6 +57,7 @@ export function AppShell({ profile, children }: AppShellProps) {
           profile={profile}
           onMenuClick={() => setMobileOpen(true)}
           onOpenPalette={() => setPalOpen(true)}
+          onOpenAI={() => setAiOpen(true)}
         />
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
           {children}
@@ -80,6 +85,9 @@ export function AppShell({ profile, children }: AppShellProps) {
 
       {/* Phase 15.C: co-pilot NL command dialog — triggered from command palette */}
       <CopilotDialog open={copilotOpen} onOpenChange={setCopilotOpen} />
+
+      {/* Phase 16.D: global AI side panel — always mounted to preserve chat state */}
+      <AiSidePanel open={aiOpen} onClose={() => setAiOpen(false)} />
     </div>
   )
 }

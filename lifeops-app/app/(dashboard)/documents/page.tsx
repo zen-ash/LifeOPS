@@ -61,10 +61,11 @@ export default async function DocumentsPage() {
       .eq('user_id', user!.id)
       .eq('entity_type', 'documents')
       .order('created_at', { ascending: true }),
-    // Phase 13.B: active tasks for link selector
+    // Phase 13.B: active tasks for link selector.
+    // project_id included so DocumentCard can scope the picker to the document's project.
     supabase
       .from('tasks')
-      .select('id, title')
+      .select('id, title, project_id')
       .eq('user_id', user!.id)
       .in('status', ['todo', 'in_progress'])
       .order('title'),
@@ -102,7 +103,8 @@ export default async function DocumentsPage() {
     created_at: d.created_at,
   }))
 
-  const tasks = (rawTasks ?? []) as { id: string; title: string }[]
+  // project_id flows through so DocumentCard can filter the task picker by the document's project
+  const tasks = (rawTasks ?? []) as { id: string; title: string; project_id: string | null }[]
 
   const docCount = documents.length
 

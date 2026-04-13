@@ -51,8 +51,8 @@ interface Project {
   name: string
 }
 
-// Phase 13.B
-interface TaskOption { id: string; title: string }
+// Phase 13.B — project_id added in Phase 16.B so the picker can be scoped to the document's project
+interface TaskOption { id: string; title: string; project_id: string | null }
 
 interface DocumentCardProps {
   doc: DocRow
@@ -200,8 +200,16 @@ export function DocumentCard({ doc, projects, docTags, tasks, linkedTaskIds }: D
     await unlinkDocumentFromTask(doc.id, taskId)
   }
 
-  const unlinkableTasks  = tasks.filter(t => !localLinkedIds.includes(t.id))
-  const linkedTasks      = localLinkedIds
+  // Phase 16.B: scope the picker to the document's currently selected project.
+  // Already-linked tasks always remain visible — we only restrict what can be newly linked.
+  // If no project is selected, all active tasks are available.
+  const unlinkableTasks = tasks.filter((t) => {
+    if (localLinkedIds.includes(t.id)) return false
+    if (!editProjectId) return true
+    return t.project_id === editProjectId
+  })
+
+  const linkedTasks = localLinkedIds
     .map(id => tasks.find(t => t.id === id))
     .filter(Boolean) as TaskOption[]
 
@@ -379,7 +387,11 @@ export function DocumentCard({ doc, projects, docTags, tasks, linkedTaskIds }: D
                 <select
                   id="edit-doc-project"
                   value={editProjectId}
-                  onChange={(e) => setEditProjectId(e.target.value)}
+                  onChange={(e) => {
+                    setEditProjectId(e.target.value)
+                    // Clear the pending task selection when project changes so the picker resets
+                    setPickTaskId('')
+                  }}
                   className={SELECT_CLS}
                 >
                   <option value="">None</option>
@@ -406,7 +418,7 @@ export function DocumentCard({ doc, projects, docTags, tasks, linkedTaskIds }: D
                   Linked tasks (optional)
                 </Label>
 
-                {/* Linked task chips */}
+                {/* Linked task chips — always shown regardless of current project selection */}
                 {linkedTasks.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {linkedTasks.map(task => (
@@ -428,7 +440,7 @@ export function DocumentCard({ doc, projects, docTags, tasks, linkedTaskIds }: D
                   </div>
                 )}
 
-                {/* Link selector */}
+                {/* Link selector — scoped to selected project; hidden when picker is empty */}
                 {unlinkableTasks.length > 0 && (
                   <div className="flex items-center gap-2">
                     <select
@@ -451,6 +463,13 @@ export function DocumentCard({ doc, projects, docTags, tasks, linkedTaskIds }: D
                       Link
                     </Button>
                   </div>
+                )}
+
+                {/* Contextual hint when a project is selected but has no available tasks */}
+                {editProjectId && unlinkableTasks.length === 0 && linkedTasks.length === 0 && (
+                  <p className="text-xs text-muted-foreground/60 italic">
+                    No active tasks in this project.
+                  </p>
                 )}
               </div>
             )}

@@ -13,7 +13,8 @@ type TaskWithProject = Task & {
   projects: { id: string; name: string; color: string } | null
 }
 
-type StatusFilter   = 'all' | 'todo' | 'in_progress' | 'done'
+// Phase 16.C: added 'cancelled'
+type StatusFilter   = 'all' | 'todo' | 'in_progress' | 'done' | 'cancelled'
 type PriorityFilter = 'all' | 'urgent' | 'high' | 'medium' | 'low'
 type DueDateFilter  = 'all' | 'today' | 'this_week' | 'overdue'
 
@@ -31,6 +32,7 @@ type TaskGroup = {
   label: string
   count: number
   isOverdue?: boolean
+  isCancelled?: boolean
   tasks: TaskWithProject[]
 }
 
@@ -39,10 +41,26 @@ const STATUS_TABS: { key: StatusFilter; label: string }[] = [
   { key: 'todo',        label: 'To Do' },
   { key: 'in_progress', label: 'In Progress' },
   { key: 'done',        label: 'Done' },
+  { key: 'cancelled',   label: 'Canceled' },
 ]
 
 const SELECT_CLS =
   'h-8 rounded-lg border border-input bg-background px-2.5 py-1 text-xs ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 text-muted-foreground'
+
+// ── Priority-first sort (Phase 16.C) ─────────────────────────────────────────
+// Primary: urgent → high → medium → low
+// Secondary: due date ascending (undated tasks go last)
+const PRIORITY_ORDER: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 }
+
+function byPriorityThenDue(a: TaskWithProject, b: TaskWithProject): number {
+  const pa = PRIORITY_ORDER[a.priority] ?? 4
+  const pb = PRIORITY_ORDER[b.priority] ?? 4
+  if (pa !== pb) return pa - pb
+  if (!a.due_date && !b.due_date) return 0
+  if (!a.due_date) return 1
+  if (!b.due_date) return -1
+  return a.due_date.localeCompare(b.due_date)
+}
 
 function matchesDueDate(task: TaskWithProject, filter: DueDateFilter): boolean {
   if (filter === 'all') return true
@@ -59,18 +77,24 @@ function matchesDueDate(task: TaskWithProject, filter: DueDateFilter): boolean {
 }
 
 function groupTasks(tasks: TaskWithProject[]): TaskGroup[] {
-  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const today    = new Date(); today.setHours(0, 0, 0, 0)
   const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1)
 
-  const overdue: TaskWithProject[]   = []
+  const overdue:   TaskWithProject[] = []
   const todayList: TaskWithProject[] = []
-  const upcoming: TaskWithProject[]  = []
-  const noDate: TaskWithProject[]    = []
-  const done: TaskWithProject[]      = []
+  const upcoming:  TaskWithProject[] = []
+  const noDate:    TaskWithProject[] = []
+  const done:      TaskWithProject[] = []
+  const cancelled: TaskWithProject[] = []
 
   for (const task of tasks) {
-    if (task.status === 'done' || task.status === 'cancelled') {
+    if (task.status === 'done') {
       done.push(task)
+      continue
+    }
+    // Phase 16.C: cancelled tasks get their own bucket
+    if (task.status === 'cancelled') {
+      cancelled.push(task)
       continue
     }
     if (!task.due_date) {
@@ -79,17 +103,18 @@ function groupTasks(tasks: TaskWithProject[]): TaskGroup[] {
     }
     const [y, m, d] = task.due_date.split('-').map(Number)
     const due = new Date(y, m - 1, d)
-    if (due < today)       overdue.push(task)
+    if (due < today)        overdue.push(task)
     else if (due < tomorrow) todayList.push(task)
-    else                   upcoming.push(task)
+    else                    upcoming.push(task)
   }
 
   const groups: TaskGroup[] = []
-  if (overdue.length > 0)   groups.push({ key: 'overdue',  label: 'Overdue',     isOverdue: true, count: overdue.length,   tasks: overdue })
-  if (todayList.length > 0) groups.push({ key: 'today',    label: 'Today',       count: todayList.length, tasks: todayList })
-  if (upcoming.length > 0)  groups.push({ key: 'upcoming', label: 'Upcoming',    count: upcoming.length,  tasks: upcoming })
-  if (noDate.length > 0)    groups.push({ key: 'no_date',  label: 'No due date', count: noDate.length,    tasks: noDate })
-  if (done.length > 0)      groups.push({ key: 'done',     label: 'Completed',   count: done.length,      tasks: done })
+  if (overdue.length > 0)   groups.push({ key: 'overdue',   label: 'Overdue',       isOverdue: true,  count: overdue.length,   tasks: overdue.sort(byPriorityThenDue) })
+  if (todayList.length > 0) groups.push({ key: 'today',     label: 'Today',         count: todayList.length, tasks: todayList.sort(byPriorityThenDue) })
+  if (upcoming.length > 0)  groups.push({ key: 'upcoming',  label: 'Upcoming',      count: upcoming.length,  tasks: upcoming.sort(byPriorityThenDue) })
+  if (noDate.length > 0)    groups.push({ key: 'no_date',   label: 'No due date',   count: noDate.length,    tasks: noDate.sort(byPriorityThenDue) })
+  if (done.length > 0)      groups.push({ key: 'done',      label: 'Completed',     count: done.length,      tasks: done })
+  if (cancelled.length > 0) groups.push({ key: 'cancelled', label: 'Canceled',      isCancelled: true, count: cancelled.length, tasks: cancelled })
   return groups
 }
 
@@ -111,14 +136,18 @@ export function TasksView({ tasks, projects, tagsByTaskId, savedViews }: TasksVi
     return result.sort((a, b) => a.name.localeCompare(b.name))
   }, [tagsByTaskId])
 
-  const filtered = tasks.filter((t) => {
-    const statusMatch   = statusFilter   === 'all' || t.status   === statusFilter
-    const priorityMatch = priorityFilter === 'all' || t.priority === priorityFilter
-    const tagMatch      = !tagFilter     || (tagsByTaskId[t.id] ?? []).some((tg) => tg.name === tagFilter)
-    const dateMatch     = matchesDueDate(t, dueDateFilter)
-    const projectMatch  = !projectFilter || t.project_id === projectFilter
-    return statusMatch && priorityMatch && tagMatch && dateMatch && projectMatch
-  })
+  const filtered = useMemo(() => {
+    const base = tasks.filter((t) => {
+      const statusMatch   = statusFilter   === 'all' || t.status   === statusFilter
+      const priorityMatch = priorityFilter === 'all' || t.priority === priorityFilter
+      const tagMatch      = !tagFilter     || (tagsByTaskId[t.id] ?? []).some((tg) => tg.name === tagFilter)
+      const dateMatch     = matchesDueDate(t, dueDateFilter)
+      const projectMatch  = !projectFilter || t.project_id === projectFilter
+      return statusMatch && priorityMatch && tagMatch && dateMatch && projectMatch
+    })
+    // Flat list: sort by priority then due date
+    return base.sort(byPriorityThenDue)
+  }, [tasks, statusFilter, priorityFilter, tagFilter, dueDateFilter, projectFilter, tagsByTaskId])
 
   function countForStatus(key: StatusFilter) {
     if (key === 'all') return tasks.length
@@ -145,8 +174,7 @@ export function TasksView({ tasks, projects, tagsByTaskId, savedViews }: TasksVi
   const shouldGroup = statusFilter === 'all' && dueDateFilter === 'all'
   const groups = shouldGroup ? groupTasks(filtered) : null
 
-  // Phase 11.E: count overdue open tasks across ALL tasks (not just filtered)
-  // to drive the shutdown/review linkage CTA. Computed from local date same as TaskRow.
+  // Phase 11.E: overdue open task count for the shutdown/review CTA
   const overdueOpenCount = useMemo(() => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -233,7 +261,7 @@ export function TasksView({ tasks, projects, tagsByTaskId, savedViews }: TasksVi
           </div>
         </div>
 
-        {/* Tag filter bar (only if tags exist) */}
+        {/* Tag filter bar */}
         {allTags.length > 0 && (
           <div className="pt-1 border-t border-border/40">
             <TagFilterBar tags={allTags} selected={tagFilter} onSelect={setTagFilter} />
@@ -241,7 +269,7 @@ export function TasksView({ tasks, projects, tagsByTaskId, savedViews }: TasksVi
         )}
       </div>
 
-      {/* Phase 11.E: Shutdown / Review linkage CTA — appears when overdue tasks exist */}
+      {/* Phase 11.E: overdue CTA */}
       {overdueOpenCount > 0 && (
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2.5">
           <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -287,11 +315,12 @@ export function TasksView({ tasks, projects, tagsByTaskId, savedViews }: TasksVi
         <div className="rounded-xl border bg-card overflow-hidden divide-y divide-border/40">
           {groups.map((group) => (
             <div key={group.key}>
-              {/* Group header */}
               <div
                 className={cn(
                   'flex items-center gap-2 px-4 py-2.5 border-b border-border/40',
-                  group.isOverdue ? 'bg-destructive/[0.04]' : 'bg-muted/20'
+                  group.isOverdue   ? 'bg-destructive/[0.04]'
+                  : group.isCancelled ? 'bg-muted/10'
+                  : 'bg-muted/20'
                 )}
               >
                 {group.isOverdue && (
@@ -302,7 +331,7 @@ export function TasksView({ tasks, projects, tagsByTaskId, savedViews }: TasksVi
                     'text-[10px] font-semibold uppercase tracking-wider',
                     group.isOverdue
                       ? 'text-destructive/70'
-                      : group.key === 'done'
+                      : group.key === 'done' || group.key === 'cancelled'
                       ? 'text-muted-foreground/50'
                       : 'text-muted-foreground/60'
                   )}
@@ -319,7 +348,6 @@ export function TasksView({ tasks, projects, tagsByTaskId, savedViews }: TasksVi
                 </span>
               </div>
 
-              {/* Tasks in group */}
               {group.tasks.map((task) => (
                 <TaskRow
                   key={task.id}
@@ -332,7 +360,7 @@ export function TasksView({ tasks, projects, tagsByTaskId, savedViews }: TasksVi
           ))}
         </div>
       ) : (
-        /* Flat list (when filters are active) */
+        /* Flat list (when filters are active) — sorted by priority then due date */
         <div className="rounded-xl border bg-card overflow-hidden">
           {filtered.map((task) => (
             <TaskRow

@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, usePathname } from 'next/navigation'
-import { Menu, LogOut, Settings, User, Search } from 'lucide-react'
+import { Menu, LogOut, Settings, User, Search, Bot } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { Button } from '@/components/ui/button'
@@ -39,9 +39,10 @@ interface HeaderProps {
   } | null
   onMenuClick: () => void
   onOpenPalette?: () => void
+  onOpenAI?: () => void
 }
 
-export function Header({ profile, onMenuClick, onOpenPalette }: HeaderProps) {
+export function Header({ profile, onMenuClick, onOpenPalette, onOpenAI }: HeaderProps) {
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
@@ -89,6 +90,16 @@ export function Header({ profile, onMenuClick, onOpenPalette }: HeaderProps) {
           <kbd className="pointer-events-none inline-flex h-4 select-none items-center gap-0.5 rounded border border-border/50 bg-background px-1 font-mono text-[9px] font-medium text-muted-foreground/70 opacity-90">
             <span className="text-[10px]">⌘</span>K
           </kbd>
+        </button>
+
+        {/* Phase 16.D: AI side panel trigger */}
+        <button
+          onClick={onOpenAI}
+          className="h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          aria-label="Open AI Assistant"
+          title="AI Assistant"
+        >
+          <Bot className="h-4 w-4" />
         </button>
 
         <ThemeToggle />

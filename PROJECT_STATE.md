@@ -1,5 +1,5 @@
 # LifeOPS — Project State
-_Last updated: Phase 15.C complete — Co-Pilot Command Line_
+_Last updated: Phase 16.C complete_
 
 ---
 
@@ -53,6 +53,7 @@ Soft Eng Proj/                          ← project root
 │   ├── add_saved_views.sql             ← Phase 5B
 │   ├── add_study_buddy.sql            ← Phase 6A
 │   ├── add_leaderboard.sql            ← Phase 6B
+│   ├── add_weekly_plans.sql           ← Phase 7B
 │   ├── add_activity_log.sql           ← Phase 11.A
 │   ├── add_daily_shutdowns.sql        ← Phase 11.B
 │   ├── add_weekly_reviews.sql         ← Phase 11.C
@@ -63,7 +64,8 @@ Soft Eng Proj/                          ← project root
 │   ├── add_calendar_events.sql        ← Phase 14.A
 │   ├── add_calendar_sync.sql          ← Phase 14.B
 │   ├── add_vault_media.sql            ← Phase 15.A
-│   └── add_pdf_parsing.sql            ← Phase 15.B
+│   ├── add_pdf_parsing.sql            ← Phase 15.B
+│   └── add_project_tags.sql           ← Phase 16.A
 │
 ├── extension/                          ← Phase 8: Chrome extension (load unpacked in Chrome)
 │   ├── manifest.json                   ← Manifest V3
@@ -95,6 +97,10 @@ Soft Eng Proj/                          ← project root
     │   │   ├── chat/route.ts           ← Phase 7A: streaming AI chat endpoint
     │   │   ├── planner/route.ts        ← Phase 7B: generateObject weekly plan endpoint
     │   │   ├── review/route.ts         ← Phase 11.C: generateObject weekly review AI summary
+    │   │   ├── vault/route.ts          ← Phase 13.C: RAG endpoint (embed query → match_embeddings RPC → answer)
+    │   │   ├── calendar/
+    │   │   │   ├── connect/route.ts    ← Phase 14.A: GET redirects to Google OAuth consent (full calendar scope)
+    │   │   │   └── callback/route.ts  ← Phase 14.A: exchanges code for tokens, upserts calendar_connections
     │   │   ├── transcribe/route.ts     ← Phase 15.A: Whisper audio transcription endpoint
     │   │   ├── process-pdf/route.ts    ← Phase 15.B: PDF text extraction endpoint (maxDuration=30)
     │   │   └── copilot/route.ts        ← Phase 15.C: NL command parse-only endpoint (returns tool call, never mutates)
@@ -141,8 +147,10 @@ Soft Eng Proj/                          ← project root
     │   ├── feedback/
     │   │   └── FeedbackDialog.tsx      ← Phase 12.C: bug/feature/general feedback dialog
     │   ├── projects/
-    │   │   ├── ProjectCard.tsx, AddProjectDialog.tsx
-    │   │   ├── EditProjectDialog.tsx, ProjectsView.tsx
+    │   │   ├── ProjectCard.tsx         ← Phase 16.A: inline status dropdown; tag badges; onSelect for hub
+    │   │   ├── AddProjectDialog.tsx, EditProjectDialog.tsx
+    │   │   ├── ProjectsView.tsx        ← Phase 16.A: status tabs; type pills; TagFilterBar; hub state
+    │   │   └── ProjectHubPanel.tsx     ← Phase 16.A: lazy slide-over hub; linked tasks/docs/notes; tag editor
     │   ├── tasks/
     │   │   ├── AddTaskDialog.tsx, EditTaskDialog.tsx
     │   │   ├── TaskRow.tsx, TasksView.tsx
@@ -151,11 +159,13 @@ Soft Eng Proj/                          ← project root
     │   ├── habits/
     │   │   ├── AddHabitDialog.tsx, EditHabitDialog.tsx
     │   │   ├── WeekdayPicker.tsx, HabitsView.tsx
+    │   │   ├── HabitCard.tsx           ← Phase 12.E: individual habit card with skip/complete + 7-day strip
     │   │   └── HabitsDashboardWidget.tsx
     │   ├── calendar/
     │   │   └── CalendarView.tsx
     │   ├── notes/
     │   │   ├── NoteDialog.tsx, NoteCard.tsx, NotesView.tsx
+    │   │   └── NoteEditor.tsx          ← Phase 10C: split-pane right-side inline note editor
     │   ├── documents/
     │   │   ├── DocumentUploadDialog.tsx, DocumentCard.tsx, DocumentsView.tsx
     │   ├── vault/
@@ -181,28 +191,28 @@ Soft Eng Proj/                          ← project root
     │   │   └── server.ts               ← server client (async, cookie-based)
     │   ├── actions/
     │   │   ├── onboarding.ts
-    │   │   ├── projects.ts
+    │   │   ├── projects.ts             ← addProject, editProject, updateProjectStatus, deleteProject, getProjectHubData (Phase 16.A)
     │   │   ├── tasks.ts                ← addTask, editTask, deleteTask, toggleTaskStatus, rescheduleTask, carryToTomorrow, createTaskDirect, rescheduleMultipleTasks
     │   │   ├── focus.ts                ← saveSession (with from_planner; enriched logEvent payload), deleteSession
     │   │   ├── habits.ts               ← addHabit, editHabit, deleteHabit, logHabit, unlogHabit, convertHabitToTask, applyFreeze
     │   │   ├── notes.ts                ← addNote, editNote, deleteNote, togglePin, saveTranscriptAsNote
     │   │   ├── embeddings.ts           ← refreshNoteEmbeddings, refreshDocumentEmbeddings (50-chunk PDF), refreshDocumentNameEmbedding (legacy alias)
     │   │   ├── documents.ts            ← addDocument, editDocument, deleteDocument
-    │   │   ├── tags.ts                 ← setTaskTags, setNoteTags, setDocumentTags (Phase 5A)
+    │   │   ├── tags.ts                 ← setTaskTags, setNoteTags, setDocumentTags (Phase 5A); setProjectTags (Phase 16.A)
     │   │   ├── savedViews.ts           ← createSavedView, deleteSavedView, renameSavedView (Phase 5B)
     │   │   ├── studyBuddy.ts           ← sendBuddyRequest, respondToBuddyRequest, removeBuddy (Phase 6A)
     │   │   ├── planner.ts              ← savePlan (upsert weekly_plans) (Phase 7B)
     │   │   ├── activityLog.ts          ← logEvent helper (Phase 11.A; no 'use server')
+    │   │   ├── links.ts                ← Phase 13.B: linkNoteToTask, unlinkNoteFromTask, linkDocumentToTask, unlinkDocumentFromTask
     │   │   ├── shutdown.ts             ← completeShutdown server action (Phase 11.B)
     │   │   ├── review.ts               ← saveWeeklyReview server action (Phase 11.C)
     │   │   ├── calendar.ts             ← Phase 14.A/B: isCalendarConnected, getFreshAccessToken (exported), syncCalendarEvents
     │   │   ├── calendarActions.ts      ← Phase 14.A/B: disconnectCalendar, syncPlanToCalendar server actions
     │   │   └── calendarSync.ts         ← Phase 14.B: syncPlanFocusBlocksToCalendar (core write logic, no 'use server')
-    │   └── utils.ts                    ← cn() helper
+    │   ├── utils.ts                    ← cn() helper
+    │   └── templates.ts                ← Phase 12.B: 6 static PlannerTemplate definitions + TEMPLATE_BY_ID lookup
     │
-    ├── types/index.ts                  ← Profile, Project, Task, Note, Document, FocusSession, Habit, HabitLog, HabitFreezeLog, Tag, SavedView, StudyGroup, WeeklyPlan, GeneratedPlan, PlanDay, DailyShutdown, WeeklyReview, WeeklyMetrics, ReviewAISummary, ActivityLog
-    ├── lib/
-    │   └── templates.ts            ← Phase 12.B: 6 static PlannerTemplate definitions + TEMPLATE_BY_ID lookup
+    ├── types/index.ts                  ← Profile, Project, Task, Note, Document, FocusSession, Habit, HabitLog, HabitFreezeLog, HabitSkipLog, Tag, SavedView, StudyBuddy, LeaderboardEntry, CalendarEvent, WeeklyPlan, GeneratedPlan, PlanDay, DailyShutdown, WeeklyReview, WeeklyMetrics, ReviewAISummary, ActivityLog, PlannerTemplate
     └── hooks/useUser.ts
 ```
 
@@ -228,6 +238,7 @@ Soft Eng Proj/                          ← project root
 | `task_tags` | Active | Join: task ↔ tag; `PRIMARY KEY(task_id, tag_id)` |
 | `note_tags` | Active | Join: note ↔ tag (notes + journal); `PRIMARY KEY(note_id, tag_id)` |
 | `document_tags` | Active | Join: document ↔ tag; `PRIMARY KEY(document_id, tag_id)` |
+| `project_tags` | Active | Phase 16.A join: project ↔ tag; `PRIMARY KEY(project_id, tag_id)`; cascade on both FKs; RLS |
 | `saved_views` | Active | Named filter presets per user per entity_type; `filters_json JSONB` |
 | `study_buddies` | Active | Peer-to-peer buddy requests; `status` pending/accepted/declined; Phase 6A |
 | `get_weekly_leaderboard(p_timezone)` | Active RPC | SECURITY DEFINER function; aggregates focus/tasks/habits for self+buddies this week; Phase 6B |
@@ -298,6 +309,7 @@ All tables have RLS enabled with `FOR ALL USING (auth.uid() = user_id)` (or `= i
 | `add_calendar_sync.sql` | 14.B | Yes — `ALTER TABLE calendar_events ADD COLUMN is_lifeops_managed`; creates `calendar_sync_mappings` table with RLS + index |
 | `add_vault_media.sql` | 15.A | Yes — creates `vault_media` private Storage bucket (10 MB limit, text/plain + text/markdown + text/x-markdown + image/* MIME); 3 RLS policies scoped to user path prefix |
 | `add_pdf_parsing.sql` | 15.B | Yes — `ALTER TABLE documents ADD COLUMN extracted_text TEXT, ADD COLUMN parse_status TEXT NOT NULL DEFAULT 'none'` |
+| `add_project_tags.sql` | 16.A | Yes — creates `project_tags` join table with RLS; additive only; mirrors `task_tags`/`note_tags`/`document_tags` pattern |
 
 ---
 
@@ -338,7 +350,7 @@ All tables have RLS enabled with `FOR ALL USING (auth.uid() = user_id)` (or `= i
 5. **Upcoming Tasks** — next 5 non-done tasks with due dates, sorted ascending; priority badge + overdue highlight
 6. **Notes & Documents** — 3-column grid: Notes count (→ /notes), Journal count (→ /journal), Documents count (→ /documents)
 7. **Study Buddy** — 3-column grid: buddy count + pending requests (→ /study-buddy) | leaderboard rank this week (→ /leaderboard) | AI Planner link (→ /planner)
-8. **Activity Heatmap** (`ActivityHeatmap`) — Phase 12.D: GitHub-style 17-week grid; task_completed/focus_session_completed/habit_checked; 4-level color scale; native title tooltips
+8. **Activity Heatmap** (`ActivityHeatmap`) — Phase 12.D: GitHub-style 52-week grid; task_completed/focus_session_completed/habit_checked; 4-level color scale; native title tooltips
 9. **Projects** — full project grid with AddProjectDialog
 
 ---
@@ -383,17 +395,20 @@ All tables have RLS enabled with `FOR ALL USING (auth.uid() = user_id)` (or `= i
 - ✅ Phase 11.D — AI Planner Upgrade (v2 `PlanDay` schema with `tasks[]`, `habits[]`, `focus_blocks[]`, `rationale`; backward-compatible with v1 saved plans via optional fields + `normDay()` fallback; `/api/planner` route accepts `{ mode, targetDay, currentPlan }` body; `rebuild_day` generates 1 day with repair context; `rebuild_rest_of_week` generates today–Sunday with overdue task context; per-item remove (hover × on any task/habit/focus block) is pure client-state; `Rebuild My Day` button on each day card; `Rebuild Rest of Week` button in action bar; no schema migration needed — `plan_json` JSONB accepts any shape)
 - ✅ Phase 11.E — Task Intelligence (`carryToTomorrow` server action in `lib/actions/tasks.ts`; UTC-safe tomorrow date mirroring Daily Shutdown carry behavior; `getUrgencyLevel()` in `TaskRow.tsx` returning `overdue | due_today | due_soon | at_risk | normal`; `at_risk` badge for urgent+undated tasks; Carry to Tomorrow (→) hover button for overdue and due-today tasks; overdue row background tint; stronger due-date chip styling per urgency; overdue CTA banner in `TasksView.tsx` with links to `/shutdown` and `/review`; no DB migration, no type changes)
 - ✅ Phase 11.F — Focus Mode Upgrade (Planner→Focus URL handoff: `FocusBlockItem` in `PlannerView.tsx` shows hover Play icon linking to `/focus?intent=<text>&duration=45`; `/focus` page reads `searchParams` (Next.js 15 async) and passes `initialIntent`/`initialDuration` to `FocusTimer`; `FocusTimer` prefills goal + duration, selects matching preset or sets custom, shows "From planner" badge; finished state now shows "Xm of Ym planned — stopped early" when stopped early; `saveSession` enriched with `from_planner?: boolean`; activity log `logEvent` payload now includes `goal` and `from_planner`; no DB migration — `payload` column is JSONB; no new tables; no type changes to `FocusSession`)
-- ✅ Phase 12.A — Global Command Palette (`cmdk` installed; `components/ui/command.tsx` hand-written shadcn Command primitives; `components/command-palette/CommandPalette.tsx` with 3 groups: Navigation (13 items), Actions (Create Task + Start Focus), Review & Recovery (Daily Shutdown + Weekly Review); Cmd+K/Ctrl+K keyboard shortcut via `document.addEventListener` in `CommandPalette`; `open` state lifted to `AppShell`; `⌘K` hint button added to `Header` (hidden on mobile); no DB changes; no new routes)
+- ✅ Phase 12.A — Global Command Palette (`cmdk` installed; `components/ui/command.tsx` hand-written shadcn Command primitives; `components/command-palette/CommandPalette.tsx` with 3 groups: Navigation (13 items), Actions (Ask Co-Pilot + Create Task + Start Focus Session + Ask Second Brain + Voice Brain Dump + Submit Feedback — expanded by later phases), Review & Recovery (Daily Shutdown + Weekly Review); Cmd+K/Ctrl+K keyboard shortcut via `document.addEventListener` in `CommandPalette`; `open` state lifted to `AppShell`; `⌘K` hint button added to `Header` (hidden on mobile); no DB changes; no new routes)
 - ✅ Phase 12.B — Planner Templates (6 static templates in `lib/templates.ts`: Exam Prep, Internship Hunt, Coding Interview, Deep Work, Gym + Study, Side-Project Launch; template picker card grid in `PlannerEmptyState` with accent colors, focus-area pills, and toggle selection; `selectedTemplate` state in `PlannerView` persists across all generate/rebuild calls; `templateId` accepted in `app/api/planner/route.ts` body; resolved via `TEMPLATE_BY_ID` lookup; `planning_emphasis` injected as `## Weekly Template` section in system prompt; no DB changes; fully backward-compatible — templateId is optional)
 - ✅ Phase 12.C — Feedback Widget (`supabase/add_user_feedback.sql` migration: `user_feedback` table with INSERT-only RLS, no read/update/delete policies; `lib/actions/feedback.ts` server action validates type + trims message; `components/feedback/FeedbackDialog.tsx` — Dialog with category pills (bug/feature/general), textarea, pathname-captured route context, inline success state + 1.5s auto-close; `Sidebar.tsx` gets `onOpenFeedback?` prop + "Share feedback" button above user footer; `CommandPalette.tsx` gets `onOpenFeedback?` prop + "Submit Feedback" CommandItem that closes palette then opens dialog; `feedbackOpen` state in `AppShell` shared between both triggers; **manual step required**: run `add_user_feedback.sql` in Supabase SQL editor)
 - ✅ Phase 12.D — Activity Heatmap (GitHub-style 52-week contribution grid on `/dashboard`; signals: `task_completed` + `focus_session_completed` + `habit_checked` from `user_activity_logs`; server-side UTC date aggregation in dashboard page; builds complete day array from prior 52-week Sunday to today including zero-activity days; `components/dashboard/ActivityHeatmap.tsx` — pure presentational component; CSS Grid with `gridTemplateColumns: repeat(weekCount, 1fr)` stretches to card width; 4-level color scale; native `title` tooltip; Mon/Thu row labels; legend; horizontally scrollable on mobile; no new DB table, no SQL migration)
 - ✅ Phase 12.E — Habits Intelligence (`supabase/add_habit_skip_logs.sql`: `habit_skip_logs` table with `UNIQUE(habit_id, skip_date)` and INSERT-only-style RLS; `skipHabit`/`unskipHabit` server actions in `lib/actions/habits.ts`; `unlogHabit` event renamed from `habit_skipped` → `habit_unchecked`; `HabitCard` gains `skipDates` prop, Skip button with amber active state, amber color in 7-day history strip for skipped days, 14-day consistency display "X/14 days" + ↑↓ trend arrow computed client-side from existing logs; `habit_skip_logs` queried in habits page, review page, shutdown page; Daily Shutdown gains "Today's habits" section listing all habits due today with optimistic Complete/Skip buttons preserving form state; `HabitConsistencyItem` gains `skippedCount?`; Weekly Review AI prompt now distinguishes intentional skips from plain misses: "Meditation: 4/7 days (57%) (2 intentionally skipped), 1 missed"; **manual step required**: run `add_habit_skip_logs.sql` in Supabase SQL editor)
 - ✅ Phase 13.A — Workload Realism + Auto-Replanning (no new DB migration needed; `planner/page.tsx` fetches `profiles.study_hours_per_week` + pending tasks; computes `availableMinutesPerDay` and `atRiskTasks`; `PlannerView` accepts realism props; `useMemo`-derived `overloadMap` (tasks×30 + focus_blocks×45 vs available); amber "Full" badge on overloaded day cards; risk/overload banner above plan grid with "Repair Rest of Week" button; `repairContext` injected into both `handleRebuildDay` and `handleRebuildRestOfWeek` API calls when risk signals exist; `api/planner/route.ts` accepts `repairContext`, injects "Workload Realism Warning" into system prompt, adds `deferredTasks` optional field to `planSchema`; `GeneratedPlan.deferredTasks?: string[]` added to types; deferred tasks section shown below plan grid)
-- ✅ Phase 14.A — Calendar Integration Foundation (`supabase/add_calendar_events.sql`: `calendar_connections` table (UNIQUE on `user_id`, stores Google OAuth tokens server-side); `calendar_events` table (UNIQUE `(user_id, provider_event_id)`, RLS, index on `(user_id, start_time)`); `lib/actions/calendar.ts`: `isCalendarConnected(userId)`, `getFreshAccessToken(userId)` refreshes via `oauth2.googleapis.com/token` when `expires_at` within 60s, removes broken connections; `syncCalendarEvents(userId, weekStart, weekEnd)` calls Google Calendar API with `singleEvents=true`, filters cancelled + transparent events, delete-and-reinsert cached events; `lib/actions/calendarActions.ts`: `disconnectCalendar()` server action deletes connection + all events + `revalidatePath('/planner')`; `/api/calendar/connect/route.ts`: GET redirects to Google OAuth consent; `/api/calendar/callback/route.ts`: exchanges code for tokens, upserts `calendar_connections`, redirects to `/planner?calendar=connected`; `components/planner/CalendarConnectBanner.tsx`: shows "Connect Google Calendar" link (not connected) or green dot + disconnect button (connected); `planner/page.tsx`: calls `isCalendarConnected` + `syncCalendarEvents` server-side, builds `calendarEventsByDay` and `calendarBusyMinutesByDay` via UTC date mapping, passes to `PlannerView`; `PlannerView.tsx`: `computeOverload` now subtracts `calendarBusyByDay[day]` from available minutes; `DayCard` renders read-only sky-blue "Calendar" section above focus blocks; all calendar props optional — planner is fully backward-compatible when not connected)
-- ✅ Phase 14.B — Two-Way Calendar Sync (`supabase/add_calendar_sync.sql`: `ALTER TABLE calendar_events ADD COLUMN is_lifeops_managed boolean NOT NULL DEFAULT false`; new `calendar_sync_mappings` table with `UNIQUE(user_id, week_start, day_name, block_text)` — maps planner focus block text to Google event IDs; RLS; index on `(user_id, week_start)`; `lib/actions/calendarSync.ts`: `syncPlanFocusBlocksToCalendar(accessToken, userId, weekStart, plan)` iterates all focus blocks, creates new Google events (title `[LifeOPS] <text>`, `extendedProperties.private.lifeops_managed = "true"`, 09:00–09:45 UTC) or patches existing, deletes stale events when blocks removed; 404 on PATCH triggers cleanup + recreate; 403 returns human-readable reconnect error; `lib/actions/calendar.ts`: `extendedProperties` added to Google API type; `is_lifeops_managed` detected and stored on insert; `getFreshAccessToken` now exported; `lib/actions/calendarActions.ts`: `syncPlanToCalendar(weekStart, plan)` server action; `disconnectCalendar` also deletes `calendar_sync_mappings`; `/api/calendar/connect/route.ts`: scope upgraded from `calendar.readonly` to `calendar.events`; `planner/page.tsx`: `calendarBusyMinutesByDay` excludes `is_lifeops_managed` events (double-count prevention); passes `calendarConnected` to `PlannerView`; `PlannerView.tsx`: DayCard Calendar section filters out `is_lifeops_managed` events; "Sync to Calendar" button in action bar; `markDirty` resets sync status; `types/index.ts`: `is_lifeops_managed: boolean` added to `CalendarEvent`; **required setup**: run `add_calendar_sync.sql` in Supabase SQL editor; existing 14.A users must disconnect + reconnect to get write scope)
+- ✅ Phase 14.A — Calendar Integration Foundation (`supabase/add_calendar_events.sql`: `calendar_connections` table (UNIQUE on `user_id`, stores Google OAuth tokens server-side); `calendar_events` table (UNIQUE `(user_id, provider_event_id)`, RLS, index on `(user_id, start_time)`); `lib/actions/calendar.ts`: `isCalendarConnected(userId)`, `getFreshAccessToken(userId)` refreshes via `oauth2.googleapis.com/token` when `expires_at` within 60s, removes broken connections; `syncCalendarEvents(userId, weekStart, weekEnd)` calls Google Calendar API with `singleEvents=true`, filters cancelled + transparent events, delete-and-reinsert cached events; `lib/actions/calendarActions.ts`: `disconnectCalendar()` server action deletes connection + all events + `revalidatePath('/planner')`; `/api/calendar/connect/route.ts`: GET redirects to Google OAuth consent (scope: full `https://www.googleapis.com/auth/calendar`); `/api/calendar/callback/route.ts`: exchanges code for tokens, upserts `calendar_connections`, redirects to `/planner?calendar=connected`; `components/planner/CalendarConnectBanner.tsx`: shows "Connect Google Calendar" link (not connected) or green dot + disconnect button (connected); `planner/page.tsx`: calls `isCalendarConnected` + `syncCalendarEvents` server-side, builds `calendarEventsByDay` and `calendarBusyMinutesByDay` via UTC date mapping, passes to `PlannerView`; `PlannerView.tsx`: `computeOverload` now subtracts `calendarBusyByDay[day]` from available minutes; `DayCard` renders read-only sky-blue "Calendar" section above focus blocks; all calendar props optional — planner is fully backward-compatible when not connected)
+- ✅ Phase 14.B — Two-Way Calendar Sync (`supabase/add_calendar_sync.sql`: `ALTER TABLE calendar_events ADD COLUMN is_lifeops_managed boolean NOT NULL DEFAULT false`; new `calendar_sync_mappings` table with `UNIQUE(user_id, week_start, day_name, block_text)` — maps planner focus block text to Google event IDs; RLS; index on `(user_id, week_start)`; `lib/actions/calendarSync.ts`: `syncPlanFocusBlocksToCalendar(accessToken, userId, weekStart, plan)` iterates all focus blocks, creates new Google events (title `[LifeOPS] <text>`, `extendedProperties.private.lifeops_managed = "true"`, 09:00–09:45 UTC) or patches existing, deletes stale events when blocks removed; 404 on PATCH triggers cleanup + recreate; 403 returns human-readable reconnect error; `lib/actions/calendar.ts`: `extendedProperties` added to Google API type; `is_lifeops_managed` detected and stored on insert; `getFreshAccessToken` now exported; `lib/actions/calendarActions.ts`: `syncPlanToCalendar(weekStart, plan)` server action; `disconnectCalendar` also deletes `calendar_sync_mappings`; `/api/calendar/connect/route.ts`: OAuth scope is full `https://www.googleapis.com/auth/calendar`; `planner/page.tsx`: `calendarBusyMinutesByDay` excludes `is_lifeops_managed` events (double-count prevention); passes `calendarConnected` to `PlannerView`; `PlannerView.tsx`: DayCard Calendar section filters out `is_lifeops_managed` events; "Sync to Calendar" button in action bar; `markDirty` resets sync status; `types/index.ts`: `is_lifeops_managed: boolean` added to `CalendarEvent`; **required setup**: run `add_calendar_sync.sql` in Supabase SQL editor; existing 14.A users must disconnect + reconnect to get write scope)
 - ✅ Phase 13.C — Chat with Your Vault (`supabase/add_vault_embeddings.sql`: `CREATE EXTENSION vector`; `vault_embeddings` table with `note_id`/`document_id` explicit nullable FKs (cascade), `embedding vector(1536)`, HNSW cosine index, RLS; `match_embeddings(query_embedding, match_count)` SECURITY DEFINER function uses `auth.uid()` internally — caller cannot bypass user filter; `lib/actions/embeddings.ts`: `chunkText()` splits on paragraphs then sentence boundaries (max 500 chars, 15 chunks); `refreshNoteEmbeddings(noteId, userId, title, content)` delete-and-reinsert via `embedMany()` batch call; `refreshDocumentNameEmbedding(documentId, userId, name)` embeds document name as single lightweight chunk; `lib/actions/notes.ts` + `lib/actions/documents.ts`: `after()` from `next/server` fires embedding refresh post-response, wrapped in try/catch so failure never breaks the save; cascade delete on `note_id`/`document_id` handles embedding cleanup on deletion; `app/api/vault/route.ts`: embeds query with `text-embedding-3-small`, calls `match_embeddings` RPC, filters to similarity > 0.3, builds grounded prompt that prohibits outside-knowledge answers, returns `{ answer, sources }`; fallback: "I don't have this in your notes."; `components/vault/VaultDialog.tsx`: compact Dialog with textarea, loading state, answer + source chips, "ask another" reset; `components/command-palette/CommandPalette.tsx`: "Ask Second Brain" callback command item; `components/layout/AppShell.tsx`: `vaultOpen` state + `VaultDialog` mounted globally; **manual steps required**: 1) enable pgvector in Supabase Dashboard → Extensions; 2) run `add_vault_embeddings.sql` in SQL editor)
 - ✅ Phase 15.C — Co-Pilot Command Line (natural-language command entry in ⌘K palette; `app/api/copilot/route.ts`: auth-gated, fetches up to 15 active tasks for context, calls OpenAI `gpt-4o-mini` via Vercel AI SDK `generateText` with `toolChoice: 'required'` + `maxSteps: 1`; tools: `create_task(title, priority, due_date, estimated_minutes)` + `reschedule_tasks(task_ids[], task_titles[], new_date)` — both strict Zod schemas; client sends `localDate`/`localDayName`/`timezone` captured at click time so relative date phrases resolve to the user's local TZ; route returns `{ tool, args }` — never executes; `components/command-palette/CopilotDialog.tsx`: 6-state machine `input → parsing → preview → executing → done | error`; `PreviewCard` renders human-readable summary of the pending action; "Rethink" returns to input with prompt preserved; on confirm calls `createTaskDirect` or `rescheduleMultipleTasks` then `router.refresh()`; `lib/actions/tasks.ts`: `createTaskDirect(data)` — object-based task creation bypassing FormData; `rescheduleMultipleTasks(taskIds, newDate)` — single batch UPDATE WHERE id IN (...); both call `revalidateTaskPaths()`; `CommandPalette.tsx`: "Ask Co-Pilot" item at top of Actions group with `onOpenCopilot` callback; `AppShell.tsx`: `copilotOpen` state + `CopilotDialog` mounted globally; no DB migration needed; no destructive tools)
-- ✅ Phase 15.B — Advanced Document Parsing / PDF Ingestion (`supabase/add_pdf_parsing.sql`: `extracted_text TEXT NULL` + `parse_status TEXT NOT NULL DEFAULT 'none'` on `documents`; `next.config.ts`: `serverExternalPackages: ['pdf-parse']` prevents webpack from bundling pdf-parse and triggering the test-fixture require; `app/api/process-pdf/route.ts`: `maxDuration = 30`; auth + ownership check; downloads PDF from `vault` bucket; `pdf-parse` extracts text; updates `extracted_text` + `parse_status` (`done`/`no_text`/`failed`); re-embeds with full text via `after()` using `refreshDocumentEmbeddings`; `revalidatePath`; `lib/actions/embeddings.ts`: `chunkText` gets optional `maxChunks` param (default 15); new `refreshDocumentEmbeddings(id, userId, name, extractedText)` — with text: up to 50 chunks of full content; without text: name-only (backwards-compat); `refreshDocumentNameEmbedding` now aliases to `refreshDocumentEmbeddings(…, null)`; `lib/actions/documents.ts`: `addDocument` accepts `parse_status?: 'none' | 'pending'`; `editDocument` SELECTs current `extracted_text` before re-embedding so a rename never wipes PDF content; both use `refreshDocumentEmbeddings`; `DocumentUploadDialog`: PDF path shows "Processing…" step label + hint text; calls `/api/process-pdf`; amber `parseWarning` for `no_text`; red error + keep-open for `failed`; `router.refresh()` after any PDF outcome; `DocumentCard` + `DocumentsView` + documents `page.tsx`: `parse_status` threaded through; card shows "Processing…" / "No text found" / "Parse failed" badges; **manual step required**: run `add_pdf_parsing.sql` in Supabase SQL editor)
+- ✅ Phase 15.B — Advanced Document Parsing / PDF Ingestion (`supabase/add_pdf_parsing.sql`: `extracted_text TEXT NULL` + `parse_status TEXT NOT NULL DEFAULT 'none'` on `documents`; `next.config.ts`: `serverExternalPackages: ['pdf-parse', 'pdfjs-dist']` prevents webpack from bundling these packages (pdf-parse v2 uses pdfjs-dist internally); `app/api/process-pdf/route.ts`: `maxDuration = 30`; auth + ownership check; downloads PDF from `vault` bucket; `pdf-parse` extracts text; updates `extracted_text` + `parse_status` (`done`/`no_text`/`failed`); re-embeds with full text via `after()` using `refreshDocumentEmbeddings`; `revalidatePath`; `lib/actions/embeddings.ts`: `chunkText` gets optional `maxChunks` param (default 15); new `refreshDocumentEmbeddings(id, userId, name, extractedText)` — with text: up to 50 chunks of full content; without text: name-only (backwards-compat); `refreshDocumentNameEmbedding` now aliases to `refreshDocumentEmbeddings(…, null)`; `lib/actions/documents.ts`: `addDocument` accepts `parse_status?: 'none' | 'pending'`; `editDocument` SELECTs current `extracted_text` before re-embedding so a rename never wipes PDF content; both use `refreshDocumentEmbeddings`; `DocumentUploadDialog`: PDF path shows "Processing…" step label + hint text; calls `/api/process-pdf`; amber `parseWarning` for `no_text`; red error + keep-open for `failed`; `router.refresh()` after any PDF outcome; `DocumentCard` + `DocumentsView` + documents `page.tsx`: `parse_status` threaded through; card shows "Processing…" / "No text found" / "Parse failed" badges; **manual step required**: run `add_pdf_parsing.sql` in Supabase SQL editor)
+- ✅ Phase 16.B — Data Cleanliness (no schema changes; Notes/Journal tag separation: `notes/page.tsx` and `journal/page.tsx` now build a `noteIds` / `journalIds` Set from the already-type-filtered entries and use it to filter `tagsByNoteId`, ensuring the `TagFilterBar` on `/notes` only surfaces Note tags and the bar on `/journal` only surfaces Journal tags; project-scoped task linking: `documents/page.tsx`, `notes/page.tsx` now select `project_id` on the tasks query and cast it through; `DocumentsView.tsx`, `DocumentCard.tsx`, `NotesView.tsx`, `NoteEditor.tsx` updated with `project_id: string | null` on `TaskOption`; `DocumentCard` and `NoteEditor` filter `unlinkableTasks` by the currently selected `editProjectId` / `projectId` — no project → show all tasks; existing cross-project linked chips remain visible for backward compatibility; `NoteEditor.handleSave` wrapped in `try/finally` to guarantee `setSaving(false)` executes even when a server action throws; journal page passes explicitly typed empty `tasks` array to satisfy updated `TaskOption` interface; no 16.C or 16.D drift)
+- ✅ Phase 16.C — Task Lifecycle Upgrade (`cancelTask` server action sets `status='cancelled'` and clears `completed_at` — not a delete; Ban-icon one-click cancel button on `TaskRow` for all active tasks; dedicated "Canceled" tab in `TasksView` status pills + separate Canceled group in the grouped view below Completed; active task groups (Overdue, Today, Upcoming, No due date) now sorted by `byPriorityThenDue` — urgent first, then high/medium/low, then due date ascending; flat list view also sorted by priority then due date; cancelled tasks rendered with strikethrough, muted opacity, dash checkbox (non-interactive), no carry/cancel buttons — reopen via Edit dialog; no schema migration needed — `cancelled` was already in the DB check constraint, `VALID_STATUSES`, `Task` type, and `EditTaskDialog`; system-wide audit confirmed all consumers (AI Planner, AI Assistant, Co-Pilot, Dashboard, Shutdown, Review, overdue logic, urgency model) already correctly excluded `cancelled` via `in(['todo','in_progress'])` or explicit filters)
+- ✅ Phase 16.A — Project-Centric Organization (`supabase/add_project_tags.sql`: `project_tags` join table — additive only, mirrors Phase 5A tag pattern; `setProjectTags` server action in `lib/actions/tags.ts`; `updateProjectStatus` lightweight server action + `getProjectHubData` lazy fetch in `lib/actions/projects.ts`; `/projects` page now fetches `tagsByProjectId` on initial load via parallel Promise.all; `ProjectsView` gains status tabs Active/Completed/Archived/All as primary filter + type pills as secondary + `TagFilterBar` for project tag filtering; `ProjectCard` gains inline status `<select>` with optimistic update + revert-on-error + `TagBadge` display + `onSelect` callback; `ProjectHubPanel` new fixed right-side slide-over — fetches tasks/documents/notes lazily via `getProjectHubData` only when opened, shows linked items as lightweight rows with click-through links, includes `TagInput` + save button for managing project tags; existing `tasks.project_id` / `notes.project_id` / `documents.project_id` FKs treated as the stable relational foundation — no destructive migrations; `projects.status` column was already present in schema — no migration needed for status support)
 - ✅ Phase 15.A — Multi-Modal Vault Ingestion (`supabase/add_vault_media.sql`: new `vault_media` private Storage bucket — 10 MB limit, accepts `text/plain` + `text/markdown` + `text/x-markdown` + `image/*`; 3 RLS policies path-scoped to user prefix; `app/api/transcribe/route.ts`: auth-gated Whisper endpoint; receives `audio` Blob from FormData; `audioExtension()` maps MIME → file extension; calls `openai.audio.transcriptions.create({ model: 'whisper-1' })`; audio NOT stored; `lib/actions/notes.ts`: `saveTranscriptAsNote(transcript)` server action — auto-titles `Voice Memo — <date>`, inserts Note, fires `after()` embedding refresh; `components/vault/VoiceMemoDialog.tsx`: state machine `idle → requesting → recording → processing → done | error`; browser `MediaRecorder` API; 60s max with progress bar + animated pulsing indicator; onstop collects Blob → POST `/api/transcribe` → `saveTranscriptAsNote` → show transcript preview + "Open in Notes" link; cleanup stops all stream tracks; `components/documents/DocumentUploadDialog.tsx`: `ACCEPTED_TYPES` extended with text MIME types; `bucketForType()` routes `text/*` to `vault_media` at upload + orphan cleanup; `<input accept>` updated to `.pdf,.jpg,.jpeg,.png,.webp,.txt,.md`; `lib/actions/documents.ts`: `deleteDocument` now fetches `file_type` to determine correct bucket for storage removal; `components/command-palette/CommandPalette.tsx`: "Voice Brain Dump" command item with `onOpenVoice` callback; `components/layout/AppShell.tsx`: `voiceOpen` state + `VoiceMemoDialog` mounted globally; **requires**: `OPENAI_API_KEY` in `.env.local`; run `add_vault_media.sql` in Supabase SQL editor)
 - ✅ Phase 13.B — Notes / Docs / Vault Linking (`supabase/add_vault_links.sql`: two junction tables `note_task_links` + `document_task_links` — each with `user_id`, cascade FKs, `UNIQUE(note_id/document_id, task_id)`, and RLS policy; `lib/actions/links.ts`: 4 server actions `linkNoteToTask`, `unlinkNoteFromTask`, `linkDocumentToTask`, `unlinkDocumentFromTask`; `notes/page.tsx` + `documents/page.tsx`: each adds 2 parallel fetches (active tasks + link rows) to existing Promise.all; `NotesView.tsx` + `DocumentsView.tsx`: accept + thread `tasks`/`linkedTaskIds*` props; `NoteEditor.tsx`: "Linked tasks" metadata row below Tags — chips with × unlink + task selector; `DocumentCard.tsx`: linked task chips on card body + "Linked tasks" section in edit dialog with same chip+select pattern; all link/unlink operations are optimistic with server revalidation; backward compatible — existing notes/docs with no links work unchanged; **manual step required**: run `add_vault_links.sql` in Supabase SQL editor)
 
@@ -416,7 +431,7 @@ The design system is **locked and launch-ready**. Key decisions:
 - **Mobile layout:** Sidebar is `hidden md:flex`. No hamburger/drawer on mobile — intentional for now.
 - **No global toast:** Errors are shown inline. No `sonner` or shadcn toast added yet.
 - **`onboarding_completed` column:** Present in DB from Phase 1, unused in code. Do not remove.
-- **Sidebar 404s:** `/study-buddy`, `/ai`, `/settings` will 404 until built — expected and intentional.
+- **Sidebar 404s:** `/settings` will 404 until built — expected and intentional.
 - **Email confirmation:** Works if Supabase email is configured. For dev, can disable in Supabase → Auth → Email → "Confirm email".
 
 ---
@@ -480,187 +495,77 @@ Every new feature should strengthen this loop. If a feature does not strengthen 
 
 ---
 
-## Phase 11 — Core Operating Loop (Next)
+## Phase 16 — Refinement Sprint
 
-**Goal:** Make LifeOPS smarter and more useful day to day. This is the most important next phase.
+**Status:** Phases 16.A, 16.B, and 16.C are complete. Phase 16.D is next.
 
-### Phase 11.A — Activity Log Foundation
-Add the append-only event telemetry table to Supabase. Everything else in Phase 11 depends on this.
-
-**Table:** `user_activity_logs`
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | UUID | PK |
-| `user_id` | UUID | FK → profiles; RLS scoped |
-| `event_type` | TEXT | see list below |
-| `entity_type` | TEXT | e.g. `task`, `habit`, `focus_session` |
-| `entity_id` | UUID | nullable |
-| `occurred_at` | TIMESTAMPTZ | default now() |
-| `payload` | JSONB | optional metadata |
-
-**Event types to log:**
-`task_completed`, `task_uncompleted`, `focus_session_completed`, `focus_session_stopped_early`, `habit_checked`, `habit_skipped`, `plan_generated`, `plan_saved`, `shutdown_completed`, `weekly_review_completed`
-
-**Important:** This table is for telemetry, reviews, history, and analytics. It is NOT the source of truth for core relational state. Core tables (`tasks`, `habits`, `focus_sessions`, etc.) remain the source of truth.
-
-### Phase 11.B — Daily Shutdown
-An end-of-day workflow surface (`/shutdown`) showing:
-- What got done today
-- What slipped
-- What gets carried forward / rescheduled / dropped
-- Tomorrow's top 3
-- Short reflection or energy note
-- Writes `shutdown_completed` event to `user_activity_logs`
-
-### Phase 11.C — Weekly Review
-A weekly review surface (`/review`) showing:
-- Planned vs actual
-- Missed and completed tasks
-- Focus time this week
-- Habit consistency
-- AI summary of what to change next week
-- Writes `weekly_review_completed` event to `user_activity_logs`
-
-### Phase 11.D — AI Planner Upgrade
-Improve the existing `/planner`:
-- Better structure: tasks vs habits vs focus blocks clearly separated
-- "Rebuild my day" and "rebuild my week" flows
-- Clearer rationale for why work is scheduled where it is
-- Better saved-plan editing / repair flow
-
-### Phase 11.E — Task Intelligence
-- At-risk task logic (overdue + upcoming urgency signals)
-- "Carry to tomorrow" action
-- Stronger due-date urgency display
-- Direct linkage into shutdown and weekly review
-
-### Phase 11.F — Focus Mode Upgrade
-- Planned vs actual tracking
-- Completion / abandonment feeding into weekly review
-- Interruption / early stop tracking if supported
-- "Start next planned block" shortcut from planner or dashboard
+**Ordering principle:** Data model first → Data cleanliness second → Operational UX third → Internal tooling last
 
 ---
 
-## Phase 12 — Premium Product Feel + Retention
-
-**Goal:** Make the app feel faster, more intentional, and more habit-forming.
-
-### Phase 12.A — Command Palette
-Global Cmd+K / Ctrl+K palette for: navigation, create task, start focus, open planner, search notes, open vault, run daily shutdown, run weekly review.
-
-### Phase 12.B — Templates
-Pre-built weekly plan templates: exam prep week, internship hunt sprint, coding interview prep, deep work week, gym + study balance, side-project launch.
-
-### Phase 12.C — Feedback Widget
-Floating entry point for bug reports / feature ideas / general feedback. Stored in Supabase.
-
-### Phase 12.D — Activity Heatmap
-GitHub-style heatmap for focus sessions, completed tasks, or habit consistency. Best placed on profile or weekly review surface.
-
-### Phase 12.E — Habits Intelligence
-Missed habits and completion patterns feed into planning/review. Trend display alongside streak — not only streak.
-
----
-
-## Phase 13 — Intelligence Moat
-
-**Goal:** Make LifeOPS feel smart, not just polished.
-
-### ✅ Phase 13.A — Workload Realism + Auto-Replanning
-**Complete.**
+### ✅ Phase 16.A — Project-Centric Organization (complete)
 
 **What was built:**
-- `planner/page.tsx`: now fetches `profiles.study_hours_per_week` and pending tasks in parallel. Computes `availableMinutesPerDay` (`study_hours_per_week * 60 / 5`, default 360 min = 6h) and `atRiskTasks` (tasks with `due_date` within the next 3 days). Both passed to `PlannerView` as props.
-- `PlannerView.tsx`: accepts `availableMinutesPerDay` + `atRiskTasks` props. `useMemo` recomputes `overloadMap` (planned vs available per day) whenever `plan` changes. Planned time per day = `tasks × 30 min + focus_blocks × 45 min`.
-  - **Overload badge**: amber "Full" chip in the header of any day card where `plannedMinutes > availableMinutes`.
-  - **Risk/overload banner**: shown above the plan grid when `atRiskTasks.length > 0` or `overloadedDays.length > 0`. Lists at-risk tasks and overloaded days. Contains a "Repair Rest of Week" button.
-  - **Repair context**: `handleRebuildDay` and `handleRebuildRestOfWeek` now pass `repairContext` to the API when risk signals exist.
-  - **Deferred tasks section**: shown below plan grid when `plan.deferredTasks` is populated.
-- `api/planner/route.ts`: accepts `repairContext` in request body. Adds a "Workload Realism Warning" section to the system prompt for repair/rebuild modes. Adds `deferredTasks` (optional string array) to `planSchema` so the AI can explicitly surface tasks it cannot fit.
-- `types/index.ts`: `GeneratedPlan.deferredTasks?: string[]` added (backward-compatible optional field).
+- `project_tags` join table (additive migration; mirrors `task_tags` / `note_tags` / `document_tags` exactly)
+- `setProjectTags` server action in `lib/actions/tags.ts`
+- `updateProjectStatus` server action — lightweight single-field update on `projects.status` (column already existed in schema)
+- `getProjectHubData` server action — lazily fetches linked tasks, documents, and notes for one project; called only when the hub panel opens, not on initial page load
+- `/projects` page: parallel fetch of `project_tags` alongside projects; builds `tagsByProjectId` map
+- `ProjectsView`: status tabs (Active / Completed / Archived / All) as primary filter; type pills (All / Projects / Areas / Clients) as secondary; `TagFilterBar` for project tag filtering; `selectedId` state drives hub panel
+- `ProjectCard`: inline status `<select>` with optimistic update + server-side revert on failure; `TagBadge` display; `onSelect` prop (optional — dashboard widget continues to work without it)
+- `ProjectHubPanel`: fixed right-side slide-over (z-50); lazy-fetches tasks/documents/notes on mount; shows linked items as lightweight rows with click-through navigation; includes `TagInput` + "Save tags" button calling `setProjectTags` + `router.refresh()`
+- Existing `tasks.project_id`, `notes.project_id`, `documents.project_id` FKs were already the correct stable relational foundation — no schema changes needed on those tables
 
-**No new DB tables or migrations required.** All signals are computed from existing `profiles`, `tasks`, and `weekly_plans` data.
+**Key architectural decision:** Initial `/projects` page load fetches only projects + their tags (lightweight). Full linked-item data for a specific project is fetched lazily when the hub panel opens — not up front for every project.
 
-### Phase 13.B — Notes / Docs / Vault Linking
-- Notes and documents linked to projects/tasks/plans/reviews
-- "Used in this week's plan" surface
-- Stronger metadata and relevance display
-
-### Phase 13.C — Chat with Your Vault (RAG)
-Lightweight RAG over user notes and documents:
-- Use chunk-based retrieval (not one embedding per full long document)
-- Each chunk: `user_id`, `source_type`, `source_id`, `chunk_index`, `content`, `embedding`
-- Enable Supabase vector support; embed query; retrieve top chunks; answer from chunks with source citations
-- Scope all retrieval by `user_id`; answer only from retrieved user-owned content
-- Do not overbuild with a giant framework — start with a lightweight MVP
-- Build this only after Phase 13.B (notes/docs data structure is ready)
+**Manual step (already completed):** Run `supabase/add_project_tags.sql` in Supabase SQL Editor.
 
 ---
 
-## Phase 14 — Real-World Integration
+### ✅ Phase 16.B — Data Cleanliness (complete)
 
-**Goal:** Make LifeOPS more useful in actual daily scheduling.
-
-### Phase 14.A — Calendar Integration Foundation
-- Read-only import of calendar events into the planner view
-- Display real events alongside planned work blocks
-- Foundation layer before two-way sync
-
-### Phase 14.B — Two-Way Calendar Sync
-- Google / Outlook two-way sync
-- Push time-blocked work out to calendar
-- Pull real events back; planning respects real availability
-- Build this only after Phase 11.D (AI Planner upgrade) is stable
+**What was built:**
+- Notes/Journal tag separation at the server-processing layer (no schema changes): `notes/page.tsx` builds a `noteIds` Set from type='note' entries and filters `tagsByNoteId` to those IDs; `journal/page.tsx` does the same with a `journalIds` Set from type='journal' entries. The `TagFilterBar` on each page now only surfaces tags that actually belong to that entry type.
+- Project-scoped task linking across Documents, Notes, and Journals: `DocumentCard`, `NoteEditor` each filter `unlinkableTasks` by the currently selected project — when a project is selected, the picker shows only that project's active tasks; when no project is selected, all active tasks are shown (safe fallback).
+- `documents/page.tsx` and `notes/page.tsx` now include `project_id` in the tasks select query so it flows through to the pickers.
+- `DocumentsView`, `NotesView` `TaskOption` interfaces updated with `project_id: string | null`.
+- `NoteEditor.handleSave` wrapped in `try/finally` — `setSaving(false)` is now guaranteed even if a server action throws, preventing the Save button from getting stuck in a disabled state.
+- Journal page passes an explicitly typed empty tasks array to satisfy the updated `TaskOption` interface.
+- Existing cross-project task links remain visible and removable (backward compatible — only new linking is scoped).
 
 ---
 
-## Phase 15 — Platform Polish + Installability
+### ✅ Phase 16.C — Task Lifecycle Upgrade (complete)
 
-**Goal:** Make the app more "app-like."
-
-### Phase 15.A — PWA
-Web app manifest, installable behavior, app-like shell.
-
-### Phase 15.B — Staged Offline Support
-Shell/offline-friendly caching first. Queued writes and deep offline sync only later if truly needed.
-
----
-
-## Cross-Cutting Ongoing Upgrade Tracks
-
-These are not separate phases but ongoing improvements as we go:
-
-| Feature | Ongoing upgrade |
-|---|---|
-| AI Planner | Rebuild day/week; better realism; clearer task/habit/focus separation; better explanations |
-| Tasks | Risk/urgency; carry-forward logic; planner/review linkage |
-| Focus | Stronger write-back into reviews and planner realism; better completion outcome tracking |
-| Habits | Missed habits affect replanning/review; trend, not only streak |
-| Notes/Vault | Stronger linkage to tasks/projects/plans; support future RAG well |
+**What was built:**
+- `cancelTask(taskId)` server action in `lib/actions/tasks.ts` — sets `status = 'cancelled'`, clears `completed_at`; intentionally not a delete so cancelled tasks remain in the history
+- Ban-icon one-click cancel button on `TaskRow`, visible on hover for all active (non-done, non-cancelled) tasks; confirmation prompt before cancelling
+- Cancelled tasks in `TaskRow`: strikethrough title, `opacity-50`, dash in checkbox (non-interactive — cannot toggle), no carry/cancel buttons; reopen by changing status in the Edit dialog
+- Dedicated "Canceled" tab added to `TasksView` status pills; Canceled group shown in the grouped view (below Completed) with its own muted section header
+- `byPriorityThenDue` sort applied within every active group (Overdue, Today, Upcoming, No due date) and the flat filtered list — urgent tasks rise to the top, then due date ascending, undated tasks last
+- No schema migration needed — `'cancelled'` was already in the DB check constraint, `VALID_STATUSES`, `Task` TypeScript type, and `EditTaskDialog` status options
+- System-wide audit confirmed all consumers already correctly excluded `cancelled`: AI Planner and AI Assistant (`in(['todo','in_progress'])`), Co-Pilot (`in(['todo','in_progress'])`), Dashboard upcoming tasks (`not('status','in','("done","cancelled")')`), Daily Shutdown slipped/suggestions (`in(['todo','in_progress'])`), Weekly Review missed tasks (`in(['todo','in_progress'])`), overdue CTA count, urgency model, `matchesDueDate` overdue filter
 
 ---
 
-## Build Execution Order
+### 🔜 Phase 16.D — AI Workspace & UX Safety ← **next implementation target**
 
-| # | Phase | Description |
-|---|---|---|
-| 1 | 11.A | ✅ Activity Log Foundation |
-| 2 | 11.B | ✅ Daily Shutdown |
-| 3 | 11.C | Weekly Review |
-| 4 | 11.D | AI Planner Upgrade |
-| 5 | 11.E | Task Intelligence |
-| 6 | 11.F | Focus Mode Upgrade |
-| 7 | 12.A | Command Palette |
-| 8 | 12.B | Templates |
-| 9 | 12.C | Feedback Widget |
-| 10 | 12.D | Activity Heatmap |
-| 11 | 12.E | Habits Intelligence |
-| 12 | 13.A | Workload Realism + Auto-Replanning |
-| 13 | 13.B | Notes / Docs / Vault Linking |
-| 14 | 13.C | Chat with Your Vault (RAG) |
-| 15 | 14.A | Calendar Integration Foundation |
-| 16 | 14.B | Two-Way Calendar Sync |
-| 17 | 15.A | PWA |
-| 18 | 15.B | Staged Offline Support |
+**Goal:** Make the AI surface more accessible and protect user relationships.
+
+Planned work:
+- Convert the AI Assistant from a standalone page (`/assistant`) into a global side panel / slide-over drawer accessible from any page
+- Implement lightweight chat persistence — simple linear conversation history per user session; no branching threads; no complex chat-management UI
+- Add an "Are you sure?" confirmation popup before removing a friend in the Study Buddy module
+
+**Guardrail:** Chat persistence must remain simple and linear. Do not introduce branching conversation trees, named threads, or thread-management UI in this phase.
+
+---
+
+### 🔜 Phase 16.E — Admin View
+
+**Goal:** Basic operational visibility for internal use.
+
+Planned work:
+- Build a protected admin-only route layout (separate from the `(dashboard)` route group; access controlled by an env-level flag or a hardcoded admin user ID check)
+- Basic operational metrics: total users, active tasks, focus sessions in the last 7 days
+- Integrate existing Feedback Widget submissions (`user_feedback` table) into the admin dashboard view

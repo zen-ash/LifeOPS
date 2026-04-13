@@ -229,6 +229,28 @@ export async function rescheduleMultipleTasks(taskIds: string[], newDate: string
   return { success: true }
 }
 
+// Phase 16.C: one-click cancel — sets status to cancelled and clears completed_at.
+// Intentionally separate from deleteTask: cancelled tasks remain in the history
+// and are visible in the Canceled section of the Tasks workspace.
+export async function cancelTask(taskId: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('tasks')
+    .update({ status: 'cancelled', completed_at: null })
+    .eq('id', taskId)
+    .eq('user_id', user.id)
+
+  if (error) return { error: error.message }
+
+  revalidateTaskPaths()
+  return { success: true }
+}
+
 export async function toggleTaskStatus(taskId: string, currentStatus: string) {
   const supabase = await createClient()
   const {

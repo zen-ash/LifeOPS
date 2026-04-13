@@ -89,7 +89,10 @@ export function StudyBuddyView({ currentUserId, relationships, profileMap }: Stu
     })
   }
 
-  function handleRemove(requestId: string) {
+  function handleRemove(requestId: string, displayName: string) {
+    if (!confirm(
+      `Remove ${displayName} as a study buddy?\n\nYou'll lose shared leaderboard visibility. You can re-invite them any time.`
+    )) return
     startTransition(async () => {
       await removeBuddy(requestId)
       router.refresh()
@@ -234,7 +237,7 @@ export function StudyBuddyView({ currentUserId, relationships, profileMap }: Stu
                     size="sm"
                     variant="ghost"
                     className="shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                    onClick={() => handleRemove(r.id)}
+                    onClick={() => handleRemove(r.id, getDisplayName(otherId))}
                     disabled={isPending}
                   >
                     Remove
@@ -279,7 +282,7 @@ export function StudyBuddyView({ currentUserId, relationships, profileMap }: Stu
                   size="sm"
                   variant="ghost"
                   className="shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                  onClick={() => handleRemove(r.id)}
+                  onClick={() => handleRemove(r.id, getDisplayName(r.addressee_user_id))}
                   disabled={isPending}
                 >
                   Cancel

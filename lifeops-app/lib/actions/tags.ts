@@ -148,3 +148,30 @@ export async function setDocumentTags(documentId: string, tagNames: string[]) {
   revalidatePath('/dashboard')
   return { success: true }
 }
+
+// Replace all tag associations for a project
+export async function setProjectTags(projectId: string, tagNames: string[]) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const tagIds = await resolveTagIds(supabase, user.id, tagNames)
+
+  await supabase
+    .from('project_tags')
+    .delete()
+    .eq('project_id', projectId)
+    .eq('user_id', user.id)
+
+  if (tagIds.length > 0) {
+    const { error } = await supabase
+      .from('project_tags')
+      .insert(tagIds.map((tag_id) => ({ project_id: projectId, tag_id, user_id: user.id })))
+    if (error) return { error: error.message }
+  }
+
+  revalidatePath('/projects')
+  return { success: true }
+}

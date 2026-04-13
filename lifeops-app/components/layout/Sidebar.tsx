@@ -55,9 +55,10 @@ interface SidebarProps {
   mobileOpen: boolean
   onClose: () => void
   onOpenFeedback?: () => void
+  onOpenAI?: () => void
 }
 
-export function Sidebar({ profile, mobileOpen, onClose, onOpenFeedback }: SidebarProps) {
+export function Sidebar({ profile, mobileOpen, onClose, onOpenFeedback, onOpenAI }: SidebarProps) {
   const pathname = usePathname()
 
   const initials =
@@ -132,22 +133,40 @@ export function Sidebar({ profile, mobileOpen, onClose, onOpenFeedback }: Sideba
           Tools
         </p>
 
-        {toolsNav.map(({ label, href, icon: Icon }) => (
-          <Link
-            key={href}
-            href={href}
-            onClick={onClose}
-            className={cn(
-              'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-sm transition-colors duration-150',
-              isActive(href)
-                ? 'bg-primary/10 text-primary font-medium'
-                : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground'
-            )}
-          >
-            <Icon className="h-4 w-4 shrink-0" />
-            {label}
-          </Link>
-        ))}
+        {toolsNav.map(({ label, href, icon: Icon }) => {
+          // Phase 16.D: AI Assistant opens the side panel instead of navigating
+          if (href === '/assistant') {
+            return (
+              <button
+                key={href}
+                onClick={() => { onClose(); onOpenAI?.() }}
+                className={cn(
+                  'w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-sm transition-colors duration-150',
+                  'text-muted-foreground hover:bg-accent/70 hover:text-foreground'
+                )}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                {label}
+              </button>
+            )
+          }
+          return (
+            <Link
+              key={href}
+              href={href}
+              onClick={onClose}
+              className={cn(
+                'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-sm transition-colors duration-150',
+                isActive(href)
+                  ? 'bg-primary/10 text-primary font-medium'
+                  : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground'
+              )}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              {label}
+            </Link>
+          )
+        })}
       </nav>
 
       {/* Phase 12.C: feedback trigger — subtle button above user footer */}
